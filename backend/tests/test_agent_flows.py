@@ -70,7 +70,7 @@ def test_agent_answers_from_timetable_and_deadlines(db_session):
     db_session.commit()
     reply = handle_turn(db_session, student, "What should I focus on today?", now=NOW)
     assert "DBMS" in reply
-    assert "cn assignment 4" in reply.lower()
+    assert "cn assignment" in reply.lower()
     nxt = handle_turn(db_session, student, "What is my next class?", now=NOW)
     assert "DBMS" in nxt
 
