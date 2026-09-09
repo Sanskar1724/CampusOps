@@ -34,8 +34,18 @@ Covers: hello/fallback brain replies, handler posting the exact hello reply on
 a real `Thread`, kernel routing (`interpret()` yields the `Host` command),
 channel-agnostic rule (email + telegram), mailbox-required guard.
 
-## Live verification (needs credentials, not run yet)
+## Live verification — DONE 2026-09-10
 
+- Gateway reachable, key valid (`GET /v1/channels` → live catalog).
+- Email connected: `campusops@agents.trycaspianai.com` (`conn_3441d0…`).
+- Telegram hosted also connected: `@Sankiyy_bot`.
+- Test email in → `message.received`; polling `python -m backend.app.comms.runner`
+  → handler ran → `message.sent` ("What is your PRN…", correct onboarding turn
+  for a new sender). Full Caspian loop confirmed live.
+- Note: `POST /v1/test-emails` without a target hits the newest connection
+  (telegram rejects test mail) — always pass
+  `{"connection_id": "conn_3441d0…"}` for email tests.
+- Note: only ONE runner per inbox. Two pollers race cursors and replies go missing.
 1. Set `CASPIAN_API_KEY` and `CAMPUSOPS_MAILBOX` (see `.env.example`).
 2. `python -m backend.app.comms.runner` — note the printed agent address.
 3. Send `Hello CampusOps` to that address; expect the hello reply.

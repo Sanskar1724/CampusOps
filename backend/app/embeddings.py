@@ -17,6 +17,10 @@ DIM = 128
 _TOKEN = re.compile(r"[a-z0-9]+")
 
 
+def tokens(text: str) -> list[str]:
+    return _TOKEN.findall(text.lower())
+
+
 def embed(text: str, dim: int = DIM) -> list[float]:
     vec = [0.0] * dim
     for token in _TOKEN.findall(text.lower()):

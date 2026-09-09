@@ -191,3 +191,66 @@ def test_system_status_board(db_session):
     assert {"database", "ai_model", "caspian_gateway", "telegram", "gmail"} <= names
     assert resp.json()["checks"][0]["ok"] is True  # database
     assert client.get("/api/system/status").status_code == 401  # auth required
+
+
+def test_garbage_detector():
+    from backend.app.ingestion.extract import garbage_score, is_garbage_text
+    assert garbage_score("DBMS mid-semester exam Monday Room 405") < 0.3
+    salad = "; n ; ; $ * Ess e rcc;E-tj t $ 9: j i F H *"
+    assert garbage_score(salad * 10) > 0.6
+    assert is_garbage_text(salad * 10, raw_bytes_len=50000) is True
+
+
+def test_multiformat_extraction():
+    from backend.app.ingestion.pdf_source import extract_any_text
+    text, method = extract_any_text("n.txt", "text/plain", b"DBMS exam on 12/09")
+    assert "DBMS" in text and method == "text"
+    text, method = extract_any_text("n.csv", "text/csv", b"day,subject\nMon,DBMS")
+    assert "DBMS" in text
+    from openpyxl import Workbook
+    import io as _io
+    wb = Workbook()
+    wb.active.append(["Subject", "Date"])
+    wb.active.append(["OS", "15/09"])
+    buf = _io.BytesIO()
+    wb.save(buf)
+    text, method = extract_any_text("n.xlsx",
+                                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                    buf.getvalue())
+    assert "OS" in text and method == "xlsx"
+    from docx import Document as _Docx
+    buf = _io.BytesIO()
+    d = _Docx()
+    d.add_paragraph("CN assignment due Friday")
+    d.save(buf)
+    text, method = extract_any_text(
+        "n.docx",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        buf.getvalue())
+    assert "CN assignment" in text and method == "docx"
+
+
+def test_scanned_pdf_uses_vision_ocr(db_session, monkeypatch):
+    import backend.app.ingestion.pdf_source as pdf_mod
+    monkeypatch.setattr(pdf_mod, "_layout_text", lambda data: "; n ; $ * Ess " * 60)
+    monkeypatch.setattr(pdf_mod, "_ocr_pdf_pages",
+                        lambda data: "Monday 09:00-10:00 DBMS Room 301")
+    text, method = pdf_mod.extract_pdf_text(b"x" * 50000)
+    assert method == "vision-ocr" and "DBMS" in text
+
+
+def test_hybrid_search_skips_garbage(db_session):
+    from backend.app import models
+    from backend.app.memory import add_chunk, semantic_search
+    headers = register("hyb@college.edu", "HYB1")
+    me = client.get("/api/auth/me", headers=headers).json()
+    doc = models.Document(student_id=me["id"], filename="real.pdf",
+                          mime="application/pdf", size_bytes=10)
+    db_session.add(doc)
+    db_session.commit()
+    db_session.refresh(doc)
+    add_chunk(db_session, doc, 0, "DBMS mid-semester exam on Monday in Room 405")
+    add_chunk(db_session, doc, 99, "; n ; $ * Ess " * 40)  # forced-in garbage
+    hits = semantic_search(db_session, me["id"], "DBMS exam")
+    assert hits and all("Ess" not in h["text"][:20] for h in hits)
+    assert hits[0]["score"] > 0.3  # keyword recall lifts the real match

@@ -23,22 +23,32 @@ export default function Documents() {
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-4">
           <div className="card space-y-2">
-            <div className="font-semibold">Upload PDF (max 10 MB)</div>
+            <div className="font-semibold">Upload document (max 10–15 MB)</div>
             <input
               type="file"
-              accept="application/pdf"
+              accept="application/pdf,.txt,.csv,.xlsx,.docx,image/png,image/jpeg"
               onChange={async (e) => {
                 const f = e.target.files?.[0];
                 if (!f) return;
                 setMsg("");
                 try {
                   await upload("/api/documents/upload", f);
+                  setMsg("Document processed — facts extracted below.");
                   refresh();
                 } catch (err: any) {
-                  setMsg(err.message);
+                  try {
+                    const d = JSON.parse(err.message);
+                    setMsg(typeof d.detail === "string" ? d.detail : err.message);
+                  } catch {
+                    setMsg(err.message || "Upload failed.");
+                  }
                 }
               }}
             />
+            <div className="text-xs text-slate-500">
+              PDF, TXT, CSV, XLSX, DOCX, or photos. Scanned PDFs are re-read
+              with vision OCR automatically.
+            </div>
           </div>
           <div className="card">
             <div className="font-semibold mb-2">Your documents</div>

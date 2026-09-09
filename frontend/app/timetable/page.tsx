@@ -5,6 +5,20 @@ import { api, upload } from "@/lib/api";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
+/** Turn raw API errors into human sentences instead of a crash screen. */
+function friendlyError(raw: string): string {
+  try {
+    const data = JSON.parse(raw);
+    const detail = typeof data.detail === "string" ? data.detail : raw;
+    if (detail.includes("Unknown day")) return `${detail} Tip: use full names (Monday) or Mon/Tue…`;
+    if (detail.includes("No timetable rows")) return detail;
+    if (detail.includes("scanned")) return detail;
+    return detail.slice(0, 300);
+  } catch {
+    return raw.slice(0, 300) || "Upload failed. Please try again.";
+  }
+}
+
 export default function Timetable() {
   const [rows, setRows] = useState<any[]>([]);
   const [form, setForm] = useState({ day: 0, subject: "", start_time: "09:00", end_time: "10:00", room: "", faculty: "" });
@@ -27,7 +41,11 @@ export default function Timetable() {
   return (
     <Shell>
       <h1 className="text-2xl font-bold mb-4">Timetable</h1>
-      {msg && <div className="card text-sm text-red-600 mb-4">{msg}</div>}
+      {msg && (
+        <div className={`card text-sm mb-4 ${/Detected|uploaded/i.test(msg) ? "text-emerald-700" : "text-red-600"}`}>
+          {msg}
+        </div>
+      )}
       <div className="grid gap-4 md:grid-cols-2">
         <div className="card">
           <div className="font-semibold mb-2">Weekly view</div>
@@ -95,8 +113,14 @@ export default function Timetable() {
               onChange={async (e) => {
                 const f = e.target.files?.[0];
                 if (!f) return;
-                await upload("/api/timetable/upload", f);
-                refresh();
+                setMsg("");
+                try {
+                  await upload("/api/timetable/upload", f);
+                  setMsg("Timetable uploaded.");
+                  refresh();
+                } catch (err: any) {
+                  setMsg(friendlyError(err.message));
+                }
               }}
             />
             <div className="text-xs text-slate-500">Columns: day, subject, start_time, end_time, room, faculty</div>
@@ -115,7 +139,7 @@ export default function Timetable() {
                   setMsg(`Detected ${r.entries} classes — review below.`);
                   refresh();
                 } catch (err: any) {
-                  setMsg(err.message);
+                  setMsg(friendlyError(err.message));
                 }
               }}
             />

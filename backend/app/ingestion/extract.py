@@ -140,6 +140,23 @@ def match_subjects(text: str, subjects: list[str]) -> list[str]:
     return [s for s in subjects if s and s.lower() in low]
 
 
+def garbage_score(text: str) -> float:
+    """0 = clean prose, 1 = glyph salad. Scanned-image PDFs with a broken text
+    layer score high: tokens are single letters/symbols, not words."""
+    tokens = re.findall(r"\S+", text)
+    if not tokens:
+        return 1.0
+    good = sum(1 for t in tokens
+               if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9'&.,/-]*", t) and len(t) >= 2)
+    return round(1.0 - good / len(tokens), 3)
+
+
+def is_garbage_text(text: str, raw_bytes_len: int = 0) -> bool:
+    if len(text.strip()) < 50 and raw_bytes_len > 20_000:
+        return True  # pages full of images, nearly no text layer
+    return len(text) > 200 and garbage_score(text) > 0.6
+
+
 def scan_facts(text: str, subjects: list[str], now: datetime | None = None) -> dict:
     """Deep scan for long documents: every subject, date, room, plus each
     deadline/exam/event sentence as an actionable item."""

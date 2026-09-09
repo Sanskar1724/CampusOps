@@ -114,9 +114,11 @@ class GmailSource:
         resp.raise_for_status()
         return resp.json()
 
-    def fetch(self, db: Session, student_id: int, max_results: int = 20) -> list[RawItem]:
+    def fetch(self, db: Session, student_id: int, max_results: int = 20,
+              days: int = 7) -> list[RawItem]:
         listing = self._get("https://gmail.googleapis.com/gmail/v1/users/me/messages",
-                            {"maxResults": max_results, "q": "newer_than:7d"})
+                            {"maxResults": max(1, min(max_results, 100)),
+                             "q": f"newer_than:{max(1, min(days, 30))}d"})
         items = []
         for entry in listing.get("messages", []):
             full = self._get(f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{entry['id']}",

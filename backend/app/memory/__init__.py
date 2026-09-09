@@ -48,7 +48,17 @@ def add_chunk(db: Session, document: models.Document, idx: int, text: str) -> mo
     return chunk
 
 
+def _token_overlap(query: str, text: str) -> float:
+    """Keyword recall: fraction of meaningful query tokens present in the text."""
+    qtokens = {t for t in embeddings.tokens(query) if len(t) > 2}
+    if not qtokens:
+        return 0.0
+    text_tokens = set(embeddings.tokens(text))
+    return len(qtokens & text_tokens) / len(qtokens)
+
+
 def semantic_search(db: Session, student_id: int, query: str, top_k: int = 5):
+    from backend.app.ingestion.extract import garbage_score  # noqa: E402
     chunks = list(db.scalars(select(models.DocumentChunk).where(
         models.DocumentChunk.student_id == student_id)))
     if not chunks:
@@ -56,11 +66,16 @@ def semantic_search(db: Session, student_id: int, query: str, top_k: int = 5):
     q = embeddings.embed(query)
     scored = []
     for chunk in chunks:
-        score = embeddings.cosine(q, embeddings.loads(chunk.embedding_json))
+        if garbage_score(chunk.text) > 0.7:
+            continue  # glyph salad never answers anything
+        vec_score = embeddings.cosine(q, embeddings.loads(chunk.embedding_json))
+        # Hybrid: embedding similarity + keyword recall. Either signal alone
+        # can surface the right chunk; together they rank precisely.
+        score = round(0.5 * vec_score + 0.5 * _token_overlap(query, chunk.text), 4)
         doc = db.get(models.Document, chunk.document_id)
         scored.append({"chunk_id": chunk.id, "document_id": chunk.document_id,
                        "filename": doc.filename if doc else "",
-                       "text": chunk.text, "score": round(score, 4)})
+                       "text": chunk.text, "score": score})
     scored.sort(key=lambda item: item["score"], reverse=True)
     return scored[:top_k]
 

@@ -14,6 +14,8 @@ from backend.app import models
 
 DAYS = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
         "friday": 4, "saturday": 5, "sunday": 6}
+DAY_ABBR = {"mon": 0, "tue": 1, "tues": 1, "wed": 2, "thu": 3, "thur": 3,
+            "thurs": 3, "fri": 4, "sat": 5, "sun": 6}
 
 
 def _day(value: str) -> int:
@@ -22,7 +24,10 @@ def _day(value: str) -> int:
         return int(value)
     if value in DAYS:
         return DAYS[value]
-    raise ValueError(f"Unknown day: {value!r}")
+    if value in DAY_ABBR:
+        return DAY_ABBR[value]
+    raise ValueError(
+        f"Unknown day: {value!r} (use Monday..Sunday, Mon..Sun, or 0..6).")
 
 
 def _valid_time(value: str) -> str:

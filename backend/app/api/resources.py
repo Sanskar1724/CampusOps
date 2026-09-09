@@ -144,9 +144,9 @@ async def timetable_from_document(file: UploadFile = File(...),
     mime = file.content_type or ""
     if mime == "application/pdf" and len(data) > pdf_source.MAX_PDF_BYTES:
         raise HTTPException(400, "File exceeds the 10 MB limit.")
-    if mime in pdf_source.ALLOWED_IMAGE_MIME and len(data) > pdf_source.MAX_IMAGE_BYTES:
+    if mime in pdf_source.IMAGE_MIME and len(data) > pdf_source.MAX_IMAGE_BYTES:
         raise HTTPException(400, "Image exceeds the 5 MB limit.")
-    if mime not in pdf_source.ALLOWED_MIME | pdf_source.ALLOWED_IMAGE_MIME:
+    if mime not in {pdf_source.PDF_MIME} | pdf_source.IMAGE_MIME:
         raise HTTPException(400, "Upload a PDF timetable (photos work once an OCR engine is installed).")
     try:
         text = pdf_source.extract_text(file.filename or "timetable.pdf", mime, data)
@@ -197,10 +197,13 @@ def _gmail_access_token(db: Session, student: models.Student) -> str:
 
 
 @email_router.post("/sync")
-def sync_email(db: Session = Depends(get_db), student: models.Student = Depends(Me)):
+def sync_email(days: int = 7, limit: int = 20, db: Session = Depends(get_db),
+               student: models.Student = Depends(Me)):
+    """Pull college mail. Tune the window: /sync?days=30&limit=50 for a deep catch-up."""
     token = _gmail_access_token(db, student)
     try:
-        items = email_source.GmailSource(token).fetch(db, student.id)
+        items = email_source.GmailSource(token).fetch(db, student.id,
+                                                      max_results=limit, days=days)
     except Exception as exc:
         raise HTTPException(502, f"Gmail fetch failed: {exc}")
     processed = [email_source.ingest_raw_email(db, student.id, item).id for item in items]
@@ -236,8 +239,11 @@ async def upload_doc(file: UploadFile = File(...), db: Session = Depends(get_db)
             file.content_type or "application/pdf", data)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
-    return {"id": doc.id, "filename": doc.filename,
-            "facts": safe_json_loads(doc.facts_json, {})}
+    facts = safe_json_loads(doc.facts_json, {})
+    return {"id": doc.id, "filename": doc.filename, "facts": facts,
+            "extraction": facts.get("extraction", "text-layer"),
+            "hint": ("Scanned document read with vision OCR." if facts.get("extraction") == "vision-ocr"
+                     else None)}
 
 
 @docs_router.get("/search")
