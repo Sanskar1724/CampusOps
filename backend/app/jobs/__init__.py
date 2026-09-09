@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from backend.app import models
 from backend.app.agents.tools import Ctx, generate_daily_plan
-from backend.app.comms.proactive import deliver_queued, notify_student
+from backend.app.comms.proactive import deliver_queued, notify_student, queue_notification
 from backend.app.models import utcnow
 
 BRIEF_EMOJI = "👋"
@@ -88,11 +88,11 @@ def run_deadline_sweep(db: Session, now: datetime) -> int:
                 models.Notification.student_id == deadline.student_id,
                 models.Notification.thread_id == marker)):
             continue
-        note = notify_student(db, deadline.student_id, "deadline",
-                              f"Due soon: {deadline.title}",
-                              f"{deadline.subject}: due {deadline.due_at}.")
-        note.thread_id = marker
-        db.commit()
+        note = queue_notification(db, deadline.student_id, "deadline",
+                                  f"Due soon: {deadline.title}",
+                                  f"{deadline.subject}: due {deadline.due_at}.",
+                                  thread_id=marker)
+        deliver_queued(db, note)
         sent += 1
     return sent
 

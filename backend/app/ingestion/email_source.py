@@ -28,14 +28,17 @@ def ingest_raw_email(db: Session, student_id: int, item: RawItem) -> models.Emai
         models.Email.student_id == student_id,
         models.Email.external_id == item.external_id))
     if existing:
-        email = existing
-    else:
-        email = models.Email(student_id=student_id, external_id=item.external_id,
-                             sender=item.sender, subject=item.title, body=item.body,
-                             received_at=item.received_at or utcnow())
-        db.add(email)
-        db.commit()
-        db.refresh(email)
+        prior = db.scalar(select(models.EmailExtraction).where(
+            models.EmailExtraction.email_id == existing.id))
+        if prior:
+            return prior  # re-syncs must not duplicate facts/deadlines
+        return process_email(db, existing)
+    email = models.Email(student_id=student_id, external_id=item.external_id,
+                         sender=item.sender, subject=item.title, body=item.body,
+                         received_at=item.received_at or utcnow())
+    db.add(email)
+    db.commit()
+    db.refresh(email)
     return process_email(db, email)
 
 
@@ -71,11 +74,15 @@ def apply_relevance(db: Session, email: models.Email, extraction: models.EmailEx
     extraction.status = "relevant"
     if extraction.kind in ("assignment", "deadline") and facts.get("due_date"):
         due = datetime.fromisoformat(facts["due_date"]).replace(tzinfo=timezone.utc)
-        db.add(models.Deadline(student_id=email.student_id,
-                               title=facts.get("summary", email.subject)[:480] or email.subject,
-                               subject=subject or "", due_at=due,
-                               source="email", source_id=f"email:{email.id}",
-                               priority=extraction.priority))
+        source_id = f"email:{email.id}"
+        if not db.scalar(select(models.Deadline).where(
+                models.Deadline.student_id == email.student_id,
+                models.Deadline.source_id == source_id)):
+            db.add(models.Deadline(student_id=email.student_id,
+                                   title=facts.get("summary", email.subject)[:480] or email.subject,
+                                   subject=subject or "", due_at=due,
+                                   source="email", source_id=source_id,
+                                   priority=extraction.priority))
     if extraction.kind == "exam" and facts.get("date"):
         when = datetime.fromisoformat(facts["date"]).replace(tzinfo=timezone.utc)
         db.add(models.Announcement(student_id=email.student_id, title=email.subject,

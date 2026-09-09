@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 export default function Settings() {
   const [integrations, setIntegrations] = useState<any[]>([]);
   const [msg, setMsg] = useState("");
+  const [code, setCode] = useState("");
 
   async function refresh() {
     setIntegrations(await api<any[]>("/api/integrations/"));
@@ -33,7 +34,7 @@ export default function Settings() {
               try {
                 const data = await api<{ auth_url: string }>("/api/integrations/gmail/auth-url");
                 window.open(data.auth_url, "_blank");
-                setMsg("Complete Google consent, then paste the code below using the API for now.");
+                setMsg("Complete Google consent, then paste the code below.");
               } catch (e: any) {
                 setMsg(e.message);
               }
@@ -53,6 +54,32 @@ export default function Settings() {
             </button>
           )}
         </div>
+        <form
+          className="flex gap-2"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setMsg("");
+            try {
+              await api("/api/integrations/gmail/callback", {
+                method: "POST",
+                body: JSON.stringify({ code }),
+              });
+              setCode("");
+              refresh();
+              setMsg("Gmail connected.");
+            } catch (err: any) {
+              setMsg(err.message);
+            }
+          }}
+        >
+          <input
+            className="input"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="Paste Google code here"
+          />
+          <button className="btn-ghost" type="submit">Finish</button>
+        </form>
         {msg && <div className="text-sm text-slate-600">{msg}</div>}
         <div className="text-xs text-slate-500">
           Backend: {process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}

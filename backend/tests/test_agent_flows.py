@@ -1,15 +1,11 @@
 """End-to-end behavior: onboarding → agent answers → isolation → jobs."""
 
-from datetime import datetime, timezone
-
-import pytest
+from datetime import datetime, timedelta, timezone
 
 from backend.app import models
 from backend.app.agents.core import handle_turn
-from backend.app.agents.onboarding import STEPS
 from backend.app.comms.handlers import get_or_create_student_for_sender
 from backend.app.ingestion import RawItem, email_source
-from backend.app.ingestion.email_source import student_subjects
 from backend.app.ingestion.extract import classify, extract_facts
 from backend.app.ingestion.timetable_source import replace_timetable
 from backend.app.jobs import build_daily_brief, run_all
@@ -109,6 +105,21 @@ def test_email_pipeline_and_change_detection(db_session):
     assert note is not None and "405" in note.body
 
 
+def test_reingest_does_not_duplicate(db_session):
+    student = make_student(db_session)
+    seed_timetable(db_session, student)
+    item = RawItem(external_id="dup:1", title="CN assignment due Friday",
+                   sender="rao@college.edu",
+                   body="Computer Networks assignment is due Friday.")
+    first = email_source.ingest_raw_email(db_session, student.id, item)
+    second = email_source.ingest_raw_email(db_session, student.id, item)
+    assert first.id == second.id
+    assert db_session.query(models.Email).filter_by(
+        student_id=student.id, external_id="dup:1").count() == 1
+    assert db_session.query(models.EmailExtraction).filter_by(
+        email_id=first.email_id).count() == 1
+
+
 def test_classifier_kinds():
     assert classify("Submit DBMS assignment by Friday")[0] == "assignment"
     assert classify("Mid-semester exam on Monday")[0] == "exam"
@@ -126,7 +137,6 @@ def test_daily_brief_content(db_session):
 
 
 def test_worker_sweep_sends_reminder_once(db_session):
-    from datetime import timedelta
     student = make_student(db_session)
     db_session.add(models.Reminder(student_id=student.id, text="Revise OS",
                                    remind_at=NOW - timedelta(minutes=5)))

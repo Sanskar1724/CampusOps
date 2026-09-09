@@ -12,7 +12,6 @@ from sqlalchemy.orm import Session
 
 from backend.app import models
 from backend.app.memory import semantic_search
-from backend.app.models import utcnow
 
 DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 

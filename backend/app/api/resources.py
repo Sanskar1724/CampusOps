@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy import select
@@ -20,6 +21,13 @@ from backend.app.memory import get_memories, save_memory, semantic_search
 from backend.app.models import utcnow
 
 Me = security.get_current_student
+
+
+def _aware(value):
+    """Treat naive datetimes as UTC so SQLite/Postgres comparisons stay valid."""
+    if value is not None and value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
 
 
 # ---------- student / onboarding / memory ----------
@@ -242,7 +250,9 @@ def list_deadlines(db: Session = Depends(get_db), student: models.Student = Depe
 @plan_router.post("/deadlines")
 def add_deadline(payload: schemas.DeadlineIn, db: Session = Depends(get_db),
                  student: models.Student = Depends(Me)):
-    deadline = models.Deadline(student_id=student.id, **payload.model_dump())
+    data = payload.model_dump()
+    data["due_at"] = _aware(data["due_at"])
+    deadline = models.Deadline(student_id=student.id, **data)
     db.add(deadline)
     db.commit()
     return {"id": deadline.id}
@@ -270,7 +280,9 @@ def list_tasks(db: Session = Depends(get_db), student: models.Student = Depends(
 @plan_router.post("/tasks")
 def add_task(payload: schemas.TaskIn, db: Session = Depends(get_db),
              student: models.Student = Depends(Me)):
-    task = models.Task(student_id=student.id, **payload.model_dump())
+    data = payload.model_dump()
+    data["due_at"] = _aware(data["due_at"])
+    task = models.Task(student_id=student.id, **data)
     db.add(task)
     db.commit()
     return {"id": task.id}
@@ -298,7 +310,9 @@ def list_reminders(db: Session = Depends(get_db), student: models.Student = Depe
 @plan_router.post("/reminders")
 def add_reminder(payload: schemas.ReminderIn, db: Session = Depends(get_db),
                  student: models.Student = Depends(Me)):
-    reminder = models.Reminder(student_id=student.id, **payload.model_dump())
+    data = payload.model_dump()
+    data["remind_at"] = _aware(data["remind_at"])
+    reminder = models.Reminder(student_id=student.id, **data)
     db.add(reminder)
     db.commit()
     return {"id": reminder.id}
