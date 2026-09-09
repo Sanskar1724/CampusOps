@@ -1,50 +1,65 @@
 # CampusOps — Personal Academic Agent for Students
 
-> **Status: Caspian receive→reply loop implemented and tested offline.**
-> See `docs/00-caspian-capability-map.md`, `docs/01-architecture.md`, and
-> `docs/caspian-foundation.md`. Live gateway verification still needs
-> `CASPIAN_API_KEY` + `CAMPUSOPS_MAILBOX` and has not run yet.
+An AI agent that knows your academic life and proactively helps manage it —
+college email, timetable, and documents in; briefs, reminders, and answers out.
+**Caspian is the communication foundation**: one Core Agent serves Caspian
+messaging, web chat, and scheduled nudges.
 
-## Vision
+```text
+STUDENT ─▶ CASPIAN SDK ─▶ comms/ ─▶ Core Agent ─┬─ memory (Postgres/SQLite + embeddings)
+                                                ├─ tools (timetable, email, docs, tasks)
+                                                └─ LLM (OpenAI-compatible, offline fallback)
+        ◀── thread.post / gateway ── decision ──┘
+```
 
-CampusOps collects permitted academic information (college email, timetable,
-PDFs/notices in V1), understands it, stores it in layered academic memory,
-reasons with the student's personal context, and proactively helps the student —
-with **Caspian as the communication foundation**, not an add-on.
+## Quickstart (local, no credentials needed)
 
-## Caspian-first rule
+```powershell
+python -m scripts.init_db --seed
+python -m uvicorn backend.app.main:app --port 8000   # API + docs at /docs
+python -m backend.app.jobs.worker                     # briefs + reminders (separate shell)
+cd frontend; npm install; npm run dev                 # web UI on :3000
+```
 
-- All student messaging goes through the **real Caspian SDK v1.x**
-  (`pip install caspian-sdk`, `from caspian import Caspian`).
-- Business logic never branches on `if telegram: / if discord:`.
-- One `CampusOps Core Agent` serves Caspian chat, web chat, and future channels.
-- Verified against installed `caspian-sdk==1.0.2` on Python 3.14 (2026-09-09).
-  Full capability map: `docs/00-caspian-capability-map.md`.
+Demo login: `demo.student@example.com` / `demo1234` (seeded timetable, emails,
+deadlines, room-change notice, document).
 
-## V1 scope
+Live messaging needs `CASPIAN_API_KEY` + `CAMPUSOPS_MAILBOX` (see
+`.env.example`), then `python -m backend.app.comms.runner` and message the
+agent address. Without a key, everything else still works offline.
 
-Sources: college email (Gmail API/OAuth, never passwords), timetable
-(upload/manual), PDFs/documents. **No Moodle, no WhatsApp group ingestion in V1**
-— but the ingestion interface must accept them later without rewriting the Core
-Agent.
+## Layout
 
-## Phases (Master Prompt)
+- `backend/app/comms/` — Caspian adapter (client, handlers, proactive gateway
+  sends, runner). Only place that imports `caspian`.
+- `backend/app/agents/` — Core Agent (`core.handle_turn`), toolset (`tools`),
+  conversational onboarding.
+- `backend/app/ingestion/` — source interface + Gmail, PDF, timetable
+  pipelines; rule-based classify/extract with optional LLM enrichment.
+- `backend/app/memory/`, `models.py`, `db.py` — layered memory + schema
+  (SQLite locally, PostgreSQL via `DATABASE_URL`).
+- `backend/app/jobs/` — daily brief, deadline/reminder sweeps, delivery retry
+  + worker entrypoint.
+- `backend/app/api/` — auth (JWT), student, timetable, email, documents,
+  planner, notifications, chat, integrations. OpenAPI at `/docs`.
+- `frontend/` — Next.js 14 + Tailwind: landing, auth, onboarding, dashboard,
+  chat, timetable, email, documents, planner, notifications, profile, settings.
+- `scripts/` — `init_db`, `seed_demo` (labeled demo data).
 
-0. Research (THIS COMMIT) → 1. Caspian foundation → 2. Identity →
-3. Database+memory → 4. Timetable → 5. Email → 6. PDF → 7. Core agent →
-8. Proactive → 9. Frontend → 10. End-to-end.
+## Verify
 
-Phase 1 is **not started**. It begins only after explicit confirmation of the
-Phase 0 proposal in `docs/01-architecture.md` (which ends with the minimal
-`Hello CampusOps` flow to verify).
+```powershell
+python -m pytest backend/tests/ -v   # 22 offline tests, zero network
+cd frontend; npx tsc --noEmit; npm run build
+```
 
-## Repo layout (proposed, not yet created)
+## Production notes (honest limits)
 
-See `docs/01-architecture.md` § Project structure. Key constraint from the
-official Caspian guide: **never create a `caspian/__init__.py` package** — it
-shadows the installed `caspian` SDK. Our adapter will live at
-`backend/app/comms/` (not `backend/app/caspian/`).
-
-## Configuration
-
-Copy `.env.example` to `.env` when Phase 1 starts. No secrets are committed.
+- Semantic recall uses portable hash embeddings + in-Python cosine search so
+  the demo runs anywhere; swap `embeddings.embed()` for a real model and move
+  `embedding_json` to a pgvector column for scale (compose already ships
+  `pgvector/pg16`).
+- Gmail uses read-only OAuth; refresh tokens live in `integrations` — put a
+  KMS/vault in front of the DB before real student data.
+- Set a long random `APP_SECRET_KEY`; never commit `.env`.
+- Moodle/WhatsApp are new `InformationSource` implementations, not core rewrites.

@@ -35,7 +35,7 @@ def test_fallback_brain_reply():
     assert respond_to_text("What is my next class?") == config.FALLBACK_REPLY
 
 
-def test_handler_posts_reply_on_real_thread():
+def test_handler_runs_full_pipeline_on_real_thread(db_session):
     cx = build_caspian_app(mailbox=MAILBOX, dispatch=False)
     assert len(cx.app.rules) == 1  # one handler, every channel
 
@@ -45,7 +45,10 @@ def test_handler_posts_reply_on_real_thread():
     thread = Thread(thread_id=make_message("x").thread_id)
     handler(thread, make_message("Hello CampusOps"), HandlerContext())
     assert len(thread.commands) == 1
-    assert getattr(thread.commands[0], "text", "") == config.HELLO_REPLY
+    # New sender enters onboarding first — the reply must be a real question,
+    # proving handler → DB → agent → reply works end to end.
+    text = getattr(thread.commands[0], "text", "")
+    assert text and ("name" in text.lower() or "prn" in text.lower())
 
 
 def test_inbound_routes_through_real_kernel():

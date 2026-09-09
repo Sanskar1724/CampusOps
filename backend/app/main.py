@@ -1,15 +1,43 @@
-"""FastAPI surface. Caspian remains the comms core; HTTP only hosts health
-checks today plus the hosted-gateway push route for later use."""
+"""FastAPI surface. Caspian remains the comms core; HTTP hosts health, the
+hosted-gateway push route, and the student REST API (same Core Agent)."""
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from backend.app import config
+from backend.app.api import auth as auth_routes
+from backend.app.api import resources
 from backend.app.comms.client import build_caspian_app
+from backend.app.db import init_db
 
-app = FastAPI(title="CampusOps", version="0.1.0")
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    init_db()
+    yield
+
+
+app = FastAPI(title="CampusOps", version="0.1.0", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.include_router(auth_routes.router)
+app.include_router(resources.student_router)
+app.include_router(resources.tt_router)
+app.include_router(resources.email_router)
+app.include_router(resources.docs_router)
+app.include_router(resources.plan_router)
+app.include_router(resources.notif_router)
+app.include_router(resources.chat_router)
+app.include_router(resources.integr_router)
 
 _cx = None
 

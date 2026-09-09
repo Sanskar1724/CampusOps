@@ -10,3 +10,8 @@ build/
 *.log
 .vscode/
 .idea/
+.pytest_cache/
+campusops.db
+*.db-journal
+frontend/.env.local
+frontend/.next/

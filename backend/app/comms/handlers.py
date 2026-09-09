@@ -1,11 +1,42 @@
-"""Caspian message handlers. One handler answers every connected channel."""
+"""Caspian message handlers. One handler answers every connected channel.
+
+Identity: `msg.sender` maps to `students.caspian_sender`. Unknown senders get
+a placeholder profile and enter conversational onboarding; nothing from one
+sender is ever visible to another (all downstream queries filter by student).
+"""
 
 from __future__ import annotations
 
-from caspian import Caspian, HandlerContext, Message, Thread
+import traceback
 
-from backend.app.agents.core import respond_to_text
+from caspian import Caspian, HandlerContext, Message, Thread
+from sqlalchemy import select
+
+from backend.app import config, models
+from backend.app.agents.core import handle_turn
 from backend.app.comms.service import reply_text
+from backend.app.db import SessionLocal
+from backend.app.memory import get_or_create_conversation, log_message
+
+
+def get_or_create_student_for_sender(db, sender: str) -> models.Student:
+    student = db.scalar(select(models.Student).where(
+        models.Student.caspian_sender == sender))
+    if student:
+        return student
+    tag = sender.strip() or "unknown"
+    student = models.Student(
+        full_name="", prn=f"pending:{tag}", college_email=f"pending:{tag}",
+        caspian_sender=sender, onboarding_status="pending",
+        onboarding_step="full_name")
+    db.add(student)
+    db.commit()
+    db.refresh(student)
+    return student
+
+
+def _allowed(sender: str) -> bool:
+    return not config.CASPIAN_ALLOWED_SENDERS or sender in config.CASPIAN_ALLOWED_SENDERS
 
 
 def register(cx: Caspian) -> Caspian:
@@ -14,6 +45,37 @@ def register(cx: Caspian) -> Caspian:
 
     @cx.on_message({"overlap": "queue"})
     def handle_message(thread: Thread, msg: Message, ctx: HandlerContext) -> None:
-        reply_text(thread, respond_to_text(msg.text))
+        if not _allowed(msg.sender):
+            return
+        db = SessionLocal()
+        try:
+            student = get_or_create_student_for_sender(db, msg.sender or "unknown")
+            student.caspian_thread_id = str(msg.thread_id)
+            db.commit()
+            channel = (msg.metadata or {}).get("channel", "caspian")
+            conv = get_or_create_conversation(
+                db, channel=str(channel), thread_id=str(msg.thread_id),
+                sender=msg.sender, student_id=student.id)
+            log_message(db, conv.id, "user", msg.text)
+            try:
+                reply = handle_turn(db, student, msg.text, channel=str(channel))
+            except Exception:
+                traceback.print_exc()
+                reply = ("Something went wrong on my side. Your message is saved — "
+                         "please try again in a moment.")
+            log_message(db, conv.id, "agent", reply)
+            reply_text(thread, reply)
+        finally:
+            db.close()
 
     return cx
+
+
+def handle_text_offline(student_id_sender: str, text: str) -> str:
+    """Test seam: run the same pipeline without a live Caspian connection."""
+    db = SessionLocal()
+    try:
+        student = get_or_create_student_for_sender(db, student_id_sender)
+        return handle_turn(db, student, text)
+    finally:
+        db.close()
