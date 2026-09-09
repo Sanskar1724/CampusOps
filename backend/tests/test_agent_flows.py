@@ -70,7 +70,7 @@ def test_agent_answers_from_timetable_and_deadlines(db_session):
     db_session.commit()
     reply = handle_turn(db_session, student, "What should I focus on today?", now=NOW)
     assert "DBMS" in reply
-    assert "cn assignment" in reply.lower()
+    assert "CN assignment 4" in reply
     nxt = handle_turn(db_session, student, "What is my next class?", now=NOW)
     assert "DBMS" in nxt
 
@@ -78,7 +78,7 @@ def test_agent_answers_from_timetable_and_deadlines(db_session):
 def test_reminder_created_from_chat(db_session):
     student = make_student(db_session)
     reply = handle_turn(db_session, student, "Remind me about DBMS revision tomorrow at 9am", now=NOW)
-    assert "reminder" in reply.lower() and "dbms" in reply.lower()
+    assert "Reminder set" in reply
     assert db_session.query(models.Reminder).filter_by(student_id=student.id).count() == 1
 
 

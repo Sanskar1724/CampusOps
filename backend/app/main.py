@@ -66,8 +66,13 @@ def health() -> dict:
 @app.post("/caspian/gateway")
 async def caspian_gateway(request: Request) -> JSONResponse:
     """Hosted push endpoint (used instead of `runner` polling when configured)."""
-    cx = get_cx()
-    body = await request.body()
-    results = cx.handle("gateway", bytes(body), dict(request.headers))
+    try:
+        cx = get_cx()
+        body = await request.body()
+        results = cx.handle("gateway", bytes(body), dict(request.headers))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Gateway unreachable: {exc}")
     ok = sum(1 for r in results if r.is_ok)
     return JSONResponse({"received": len(results), "ok": ok})
