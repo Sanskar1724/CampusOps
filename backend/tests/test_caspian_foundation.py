@@ -71,3 +71,10 @@ def test_rule_is_channel_agnostic():
 def test_mailbox_is_required():
     with pytest.raises(ValueError):
         build_caspian_app(mailbox="  ", dispatch=False)
+
+
+def test_telegram_self_host_builds_offline():
+    cx = build_caspian_app(telegram_bot_token="dummy-token-for-build",
+                           telegram_via="self-host", dispatch=False)
+    assert cx.channels.added() == ["telegram"]
+    assert len(cx.app.rules) == 1
