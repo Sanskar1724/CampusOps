@@ -101,6 +101,29 @@ export default function Timetable() {
             />
             <div className="text-xs text-slate-500">Columns: day, subject, start_time, end_time, room, faculty</div>
           </div>
+          <div className="card space-y-2">
+            <div className="font-semibold">📄 Scan PDF / photo timetable</div>
+            <input
+              type="file"
+              accept="application/pdf,image/png,image/jpeg"
+              onChange={async (e) => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                setMsg("");
+                try {
+                  const r = await upload("/api/timetable/from-document", f);
+                  setMsg(`Detected ${r.entries} classes — review below.`);
+                  refresh();
+                } catch (err: any) {
+                  setMsg(err.message);
+                }
+              }}
+            />
+            <div className="text-xs text-slate-500">
+              Reads weekday + time + subject + room lines and replaces the timetable.
+              Photos need an OCR engine on the server; PDFs always work.
+            </div>
+          </div>
         </div>
       </div>
     </Shell>

@@ -134,6 +134,29 @@ async def upload_tt(file: UploadFile = File(...), db: Session = Depends(get_db),
     return {"entries": count}
 
 
+@tt_router.post("/from-document")
+async def timetable_from_document(file: UploadFile = File(...),
+                                  db: Session = Depends(get_db),
+                                  student: models.Student = Depends(Me)):
+    """Scan a PDF (or photo, when OCR is installed) and adopt detected rows."""
+    from backend.app.ingestion import pdf_source  # noqa: E402
+    data = await file.read()
+    mime = file.content_type or ""
+    if mime == "application/pdf" and len(data) > pdf_source.MAX_PDF_BYTES:
+        raise HTTPException(400, "File exceeds the 10 MB limit.")
+    if mime in pdf_source.ALLOWED_IMAGE_MIME and len(data) > pdf_source.MAX_IMAGE_BYTES:
+        raise HTTPException(400, "Image exceeds the 5 MB limit.")
+    if mime not in pdf_source.ALLOWED_MIME | pdf_source.ALLOWED_IMAGE_MIME:
+        raise HTTPException(400, "Upload a PDF timetable (photos work once an OCR engine is installed).")
+    try:
+        text = pdf_source.extract_text(file.filename or "timetable.pdf", mime, data)
+        rows = timetable_source.extract_timetable_from_text(text)
+        count = timetable_source.replace_timetable(db, student.id, rows, source="pdf-scan")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return {"entries": count, "rows": rows}
+
+
 # ---------- email intelligence ----------
 
 email_router = APIRouter(prefix="/api/email", tags=["email"])

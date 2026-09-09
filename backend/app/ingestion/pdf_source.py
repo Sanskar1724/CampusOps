@@ -18,7 +18,9 @@ from backend.app.ingestion.extract import enrich_with_llm, scan_facts
 from backend.app.memory import add_chunk
 
 MAX_PDF_BYTES = 10 * 1024 * 1024
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
 ALLOWED_MIME = {"application/pdf"}
+ALLOWED_IMAGE_MIME = {"image/png", "image/jpeg"}
 CHUNK_CHARS = 1200
 
 
@@ -26,7 +28,27 @@ def extract_text(filename: str, mime: str, data: bytes) -> str:
     if mime == "application/pdf":
         reader = PdfReader(io.BytesIO(data))
         return "\n".join((page.extract_text() or "") for page in reader.pages)
+    if mime in ALLOWED_IMAGE_MIME:
+        return ocr_image(data)
     return data.decode("utf-8", errors="ignore")
+
+
+def ocr_image(data: bytes) -> str:
+    """Image text when an OCR engine exists; otherwise a clear error.
+
+    Tesseract is optional: install the binary + `pip install pytesseract` and
+    image uploads light up with zero code changes."""
+    try:
+        import pytesseract  # type: ignore
+        from PIL import Image  # type: ignore
+    except ImportError:
+        raise ValueError(
+            "This photo has no readable text layer and no OCR engine is installed. "
+            "Please upload the PDF version (or a CSV/JSON timetable) instead.")
+    try:
+        return pytesseract.image_to_string(Image.open(io.BytesIO(data)))
+    except Exception as exc:
+        raise ValueError(f"OCR failed: {exc}")
 
 
 def chunk_text(text: str, size: int = CHUNK_CHARS) -> list[str]:

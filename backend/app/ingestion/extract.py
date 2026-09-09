@@ -27,9 +27,26 @@ _KEYWORDS = [
     (["notice", "circular", "announcement", "holiday", "fee"], "announcement"),
 ]
 
-_ROOM = re.compile(r"\b[Rr]oom\s+(\w+)|([A-Z]-?\d{3,4})")
+_ROOM = re.compile(
+    r"\b(?:[Rr]oom|[Ll]ab|LH|LT|[Hh]all|[Bb]lock)\s*[-:]?\s*([\w-]+)|([A-Z]-?\d{3,4})")
 _FROM_TO_ROOM = re.compile(
     r"from\s+(?:[Rr]oom\s+)?(\w+)\s+to\s+(?:[Rr]oom\s+)?(\w+)", re.I)
+_MONTHS = {m: i + 1 for i, m in enumerate(
+    ["january", "february", "march", "april", "may", "june", "july",
+     "august", "september", "october", "november", "december"])}
+_MONTHS.update({m[:3]: i + 1 for i, m in enumerate(
+    ["january", "february", "march", "april", "may", "june", "july",
+     "august", "september", "october", "november", "december"])})
+_MONTH_DAY = re.compile(
+    r"\b(\d{1,2})(?:st|nd|rd|th)?\s*(?:[-/ ]\s*)?"
+    r"(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+    r"jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|"
+    r"dec(?:ember)?)\s*(?:(\d{2,4}))?", re.I)
+_MONTH_FIRST = re.compile(
+    r"\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+    r"jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|"
+    r"dec(?:ember)?)\s+(\d{1,2})(?:st|nd|rd|th)?\s*(?:,?\s*(\d{2,4}))?", re.I)
+_SUBJECT_CODE = re.compile(r"\b([A-Z]{2,5}\s?-?\d{2,4})\b")
 _DATE_WORD = re.compile(r"\b(today|tomorrow|day after tomorrow)\b", re.I)
 _DMY = re.compile(r"\b(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\b")
 _TIME = re.compile(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b", re.I)
@@ -48,12 +65,31 @@ def classify(text: str) -> tuple[str, str]:
     return "academic_notice", "normal"
 
 
+def _month_iso(day: int, mon: str, year: str | None, now: datetime) -> str | None:
+    month = _MONTHS.get(mon.lower()[:3], _MONTHS.get(mon.lower(), 0))
+    if not month:
+        return None
+    y = now.year
+    if year:
+        y = int(year) + (2000 if int(year) < 100 else 0)
+    try:
+        return datetime(y, month, day).date().isoformat()
+    except ValueError:
+        return None
+
+
 def _resolve_date(text: str, now: datetime) -> str | None:
     m = _DATE_WORD.search(text)
     if m:
         word = m.group(1).lower()
         delta = {"today": 0, "tomorrow": 1, "day after tomorrow": 2}[word]
         return (now + timedelta(days=delta)).date().isoformat()
+    m = _MONTH_DAY.search(text)
+    if m:
+        return _month_iso(int(m.group(1)), m.group(2), m.group(3), now)
+    m = _MONTH_FIRST.search(text)
+    if m:
+        return _month_iso(int(m.group(2)), m.group(1), m.group(3), now)
     m = _DMY.search(text)
     if m:
         day, month, year = int(m.group(1)), int(m.group(2)), m.group(3)
@@ -83,6 +119,14 @@ def find_all_dates(text: str, now: datetime) -> list[str]:
             continue
         if iso not in found:
             found.append(iso)
+    for m in list(_MONTH_DAY.finditer(text)) + list(_MONTH_FIRST.finditer(text)):
+        groups = m.groups()
+        if m.re is _MONTH_DAY:
+            iso = _month_iso(int(groups[0]), groups[1], groups[2], now)
+        else:
+            iso = _month_iso(int(groups[1]), groups[0], groups[2], now)
+        if iso and iso not in found:
+            found.append(iso)
     return found
 
 
@@ -101,9 +145,12 @@ def scan_facts(text: str, subjects: list[str], now: datetime | None = None) -> d
     deadline/exam/event sentence as an actionable item."""
     now = now or datetime.now(timezone.utc)
     kind, priority = classify(text)
+    low_subjects = match_subjects(text, subjects)
+    codes = [c for c in dict.fromkeys(_SUBJECT_CODE.findall(text))
+             if c not in low_subjects]
     facts: dict = {
         "kind": kind, "priority": priority,
-        "subjects": match_subjects(text, subjects),
+        "subjects": low_subjects + codes,
         "dates": find_all_dates(text, now),
         "rooms": find_all_rooms(text),
         "items": [],

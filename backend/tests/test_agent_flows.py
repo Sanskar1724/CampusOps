@@ -2,6 +2,8 @@
 
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from backend.app import models
 from backend.app.agents.core import handle_turn
 from backend.app.comms.handlers import get_or_create_student_for_sender
@@ -127,6 +129,29 @@ def test_classifier_kinds():
     assert classify("ok")[0] == "irrelevant"
     facts = extract_facts("CN assignment due tomorrow", ["Computer Networks"])
     assert facts.get("due_date") is not None
+
+
+def test_month_name_and_ordinal_dates():
+    from datetime import datetime, timezone
+
+    from backend.app.ingestion.extract import find_all_dates
+    now = datetime(2026, 9, 9, tzinfo=timezone.utc)
+    assert "2026-09-12" in find_all_dates("exam on 12th September", now)
+    assert "2026-09-15" in find_all_dates("Sep 15 submission", now)
+    assert "2026-10-01" in find_all_dates("01-Oct-2026 holiday", now)
+
+
+def test_timetable_text_scan():
+    from backend.app.ingestion.timetable_source import extract_timetable_from_text
+    rows = extract_timetable_from_text(
+        "Monday 09:00-10:00 DBMS Room 301\n"
+        "Tue 11:00 to 12:00 Operating Systems lab 302\n"
+        "Random notice without times")
+    assert len(rows) == 2
+    assert rows[0]["subject"] == "DBMS" and rows[0]["room"] == "301"
+    assert rows[1]["day"].lower().startswith("tue")
+    with pytest.raises(ValueError):
+        extract_timetable_from_text("no schedule here at all")
 
 
 def test_daily_brief_content(db_session):

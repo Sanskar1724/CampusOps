@@ -159,3 +159,35 @@ def test_gmail_get_callback_connects(db_session, monkeypatch):
     monkeypatch.setattr(res_mod.email_source.GmailSource, "fetch", _boom)
     sync = client.post("/api/email/sync", headers=headers)
     assert sync.status_code == 502  # fetch failure surfaces cleanly
+
+
+def _doc_pdf_bytes(lines: list[str]) -> bytes:
+    body = b"".join(b"BT /F1 12 Tf 72 %d Td (%s) Tj ET\n" % (720 - i * 20, line.encode())
+                    for i, line in enumerate(lines))
+    return _build_pdf(body)
+
+
+def test_timetable_from_document_scan(db_session):
+    headers = register("ttdoc@college.edu", "TTD1")
+    pdf = _doc_pdf_bytes(["Monday 09:00-10:00 DBMS Room 301",
+                          "Tuesday 11:00-12:00 OS Room 302"])
+    resp = client.post("/api/timetable/from-document",
+                       files={"file": ("tt.pdf", pdf, "application/pdf")},
+                       headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["entries"] == 2
+    assert len(client.get("/api/timetable/", headers=headers).json()) == 2
+    bad = client.post("/api/timetable/from-document",
+                      files={"file": ("tt.pdf", MINIMAL_PDF, "application/pdf")},
+                      headers=headers)
+    assert bad.status_code == 400  # exam notice has no weekday+time rows
+
+
+def test_system_status_board(db_session):
+    headers = register("sys@college.edu", "SYS1")
+    resp = client.get("/api/system/status", headers=headers)
+    assert resp.status_code == 200
+    names = {c["name"] for c in resp.json()["checks"]}
+    assert {"database", "ai_model", "caspian_gateway", "telegram", "gmail"} <= names
+    assert resp.json()["checks"][0]["ok"] is True  # database
+    assert client.get("/api/system/status").status_code == 401  # auth required

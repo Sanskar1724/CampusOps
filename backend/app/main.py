@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 
 from backend.app import config
 from backend.app.api import auth as auth_routes
-from backend.app.api import resources
+from backend.app.api import resources, system as system_routes
 from backend.app.comms.client import build_caspian_app
 from backend.app.db import init_db
 
@@ -38,6 +38,7 @@ app.include_router(resources.plan_router)
 app.include_router(resources.notif_router)
 app.include_router(resources.chat_router)
 app.include_router(resources.integr_router)
+app.include_router(system_routes.router)
 
 _cx = None
 

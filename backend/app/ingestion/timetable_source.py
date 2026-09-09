@@ -1,11 +1,12 @@
-"""Timetable ingestion: CSV/JSON upload or manual rows. Entries are scoped by
-division/batch so the agent only serves what applies to the student."""
+"""Timetable ingestion: CSV/JSON upload, PDF text scan, or manual rows. Entries
+are scoped by division/batch so the agent only serves what applies."""
 
 from __future__ import annotations
 
 import csv
 import io
 import json
+import re
 
 from sqlalchemy.orm import Session
 
@@ -59,3 +60,69 @@ def parse_upload(filename: str, data: bytes) -> list[dict]:
     if name.endswith(".csv"):
         return list(csv.DictReader(io.StringIO(data.decode("utf-8"))))
     raise ValueError("Upload .csv or .json (columns: day, subject, start_time, end_time, room, faculty).")
+
+
+_DAY_ANY = re.compile(
+    r"\b(mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|"
+    r"fri(?:day)?|sat(?:urday)?|sun(?:day)?)\b", re.I)
+_TIME_RANGE = re.compile(
+    r"(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|–|to)\s*"
+    r"(\d{1,2})(?::(\d{2}))?\s*(am|pm)?", re.I)
+_NOISE = re.compile(r"\b(room|lab|hall|faculty|prof\.?|div|batch)\b[\s:]*", re.I)
+
+
+def _to_24(hour: int, minute: int, meridiem: str | None, other: str | None) -> str:
+    mer = (meridiem or other or "").lower()
+    if mer == "pm" and hour < 12:
+        hour += 12
+    if mer == "am" and hour == 12:
+        hour = 0
+    return f"{hour:02d}:{minute:02d}"
+
+
+def extract_timetable_from_text(text: str) -> list[dict]:
+    """Best-effort row detection for pasted/PDF timetable text. Each row needs
+    a weekday, a time range, and a subject; room/faculty picked up when present.
+    Splits on weekday boundaries (not newlines) because PDF extraction often
+    merges lines."""
+    rows = []
+    flat = re.sub(r"\s+", " ", text)
+    day_spans = list(_DAY_ANY.finditer(flat))
+    chunks = []
+    if day_spans:
+        for i, match in enumerate(day_spans):
+            end = day_spans[i + 1].start() if i + 1 < len(day_spans) else len(flat)
+            chunks.append((match.group(1), flat[match.start():end]))
+    else:
+        chunks = []
+    if not chunks:  # fall back to line scan for unusual layouts
+        chunks = [(m.group(1), line) for line in text.splitlines()
+                  for m in [_DAY_ANY.search(line)] if m and _TIME_RANGE.search(line)]
+    for day_name, chunk in chunks:
+        time_match = _TIME_RANGE.search(chunk)
+        if not time_match:
+            continue
+        start = _to_24(int(time_match.group(1)), int(time_match.group(2) or 0),
+                       time_match.group(3), time_match.group(6))
+        end = _to_24(int(time_match.group(4)), int(time_match.group(5) or 0),
+                     time_match.group(6), time_match.group(3))
+        rest = _DAY_ANY.sub(" ", chunk)
+        rest = _TIME_RANGE.sub(" ", rest)
+        room = ""
+        room_match = re.search(
+            r"\b(?:[Rr]oom|[Ll]ab|LH|LT|[Hh]all)\s*[-:]?\s*([\w-]+)", rest)
+        if room_match:
+            room = room_match.group(1)
+            rest = rest.replace(room_match.group(0), " ")
+        subject = _NOISE.sub(" ", rest)
+        subject = re.sub(r"[-–:;|,()]+", " ", subject)
+        subject = re.sub(r"\s+", " ", subject).strip()
+        if len(subject) < 2 or subject.lower() in ("am", "pm"):
+            continue
+        rows.append({"day": day_name, "subject": subject[:120],
+                     "start_time": start, "end_time": end, "room": room})
+    if not rows:
+        raise ValueError(
+            "No timetable rows found. I need lines with a weekday, a time range "
+            "(e.g. 09:00-10:00), and a subject — paste that text or upload CSV/JSON.")
+    return rows
