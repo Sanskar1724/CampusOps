@@ -1,9 +1,9 @@
 # CampusOps — Personal Academic Agent for Students
 
-> **Status: PHASE 0 — Research only. No application code yet.**
-> See `docs/00-caspian-capability-map.md` and `docs/01-architecture.md`.
-> No code beyond research docs has been written, per the Master Prompt
-> ("DO NOT BUILD YET").
+> **Status: Caspian receive→reply loop implemented and tested offline.**
+> See `docs/00-caspian-capability-map.md`, `docs/01-architecture.md`, and
+> `docs/caspian-foundation.md`. Live gateway verification still needs
+> `CASPIAN_API_KEY` + `CAMPUSOPS_MAILBOX` and has not run yet.
 
 ## Vision
 
