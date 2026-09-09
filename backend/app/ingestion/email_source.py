@@ -133,9 +133,11 @@ class GmailSource:
 
 
 def gmail_auth_url(client_id: str, redirect_uri: str, state: str = "",
-                   extra_scope: str = "") -> str:
+                   extra_scope: str = "", gmail: bool = True) -> str:
     from urllib.parse import urlencode
-    scope = "https://www.googleapis.com/auth/gmail.readonly openid email profile"
+    scope = "openid email profile"
+    if gmail:
+        scope += " https://www.googleapis.com/auth/gmail.readonly"
     if extra_scope:
         scope += f" {extra_scope}"
     params = {

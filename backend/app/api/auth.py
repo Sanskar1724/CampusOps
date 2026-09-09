@@ -65,9 +65,12 @@ def _google_env() -> tuple[str, str]:
 
 @router.get("/google/url")
 def google_url(redirect_uri: str):
-    """Step 1 of Sign in with Google: frontend redirects the browser here."""
+    """Step 1 of Sign in with Google: frontend redirects the browser here.
+
+    Minimal scopes (identity only) — Gmail access is asked separately in
+    Settings, so sign-in never trips restricted-scope policy."""
     client_id, _ = _google_env()
-    return {"auth_url": email_source.gmail_auth_url(client_id, redirect_uri)}
+    return {"auth_url": email_source.gmail_auth_url(client_id, redirect_uri, gmail=False)}
 
 
 @router.post("/google/callback", response_model=schemas.TokenOut)
