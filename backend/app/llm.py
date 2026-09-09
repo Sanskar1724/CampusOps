@@ -64,14 +64,30 @@ class DevLLM:
         return f"Here's what I found:\n\n{context.strip()}"
 
 
+class ResilientLLM:
+    """Primary model with deterministic fallback: if the provider errors
+    (rate limits, outages — common on free tiers), the student still gets
+    their retrieved facts instead of an error dump."""
+
+    def __init__(self, primary: LLMClient, fallback: LLMClient) -> None:
+        self._primary = primary
+        self._fallback = fallback
+
+    def complete(self, system: str, user: str, context: str = "") -> str:
+        reply = self._primary.complete(system, user, context)
+        if reply.startswith("(model error") or reply.startswith("I couldn't reach"):
+            return self._fallback.complete(system, user, context)
+        return reply
+
+
 def get_llm() -> LLMClient:
     api_key = os.environ.get("OPENAI_API_KEY", "")
     if api_key:
-        return OpenAICompatibleLLM(
+        return ResilientLLM(OpenAICompatibleLLM(
             api_key=api_key,
             base_url=os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
             model=os.environ.get("MODEL", "gpt-4o-mini"),
-        )
+        ), DevLLM())
     return DevLLM()
 
 
