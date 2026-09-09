@@ -27,8 +27,9 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6">
-      <form onSubmit={submit} className="card w-full max-w-sm space-y-4">
+    <div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-indigo-50 via-white to-slate-100">
+      <div className="w-full max-w-sm space-y-3">
+      <form onSubmit={submit} className="card w-full space-y-4">
         <h1 className="text-xl font-bold">Sign in to CampusOps</h1>
         {error && <div className="text-sm text-red-600">{error}</div>}
         <div>
@@ -45,6 +46,23 @@ export default function Login() {
         </div>
         <div className="text-xs text-slate-500">Demo login: demo.student@example.com / demo1234</div>
       </form>
+      <button
+        className="btn-ghost w-full bg-white"
+        onClick={async () => {
+          setError("");
+          try {
+            const redirect = `${window.location.origin}/auth/google/callback`;
+            const data = await api<{ auth_url: string }>(
+              `/api/auth/google/url?redirect_uri=${encodeURIComponent(redirect)}`);
+            window.location.href = data.auth_url;
+          } catch (err: any) {
+            setError(err.message);
+          }
+        }}
+      >
+        <span className="mr-2 font-bold text-indigo-600">G</span> Continue with Google
+      </button>
+      </div>
     </div>
   );
 }

@@ -34,7 +34,6 @@ export default function Profile() {
                   batch: form.batch,
                   roll_number: form.roll_number,
                   semester: form.semester,
-                  course: form.course,
                 }),
               });
               setMe(updated);
@@ -53,7 +52,6 @@ export default function Profile() {
             ["batch", "Batch"],
             ["roll_number", "Roll number"],
             ["semester", "Semester"],
-            ["course", "Course"],
           ].map(([key, label]) => (
             <div key={key}>
               <label className="label">{label}</label>

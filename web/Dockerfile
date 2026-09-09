@@ -4,5 +4,5 @@ COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm install --no-audit --no-fund
 COPY frontend/ ./
 RUN npm run build
-EXPOSE 3000
+EXPOSE 3001
 CMD ["npm", "run", "start"]

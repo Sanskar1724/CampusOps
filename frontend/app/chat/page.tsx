@@ -20,6 +20,11 @@ function ChatBody() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const asked = useRef(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [msgs, busy]);
 
   async function ask(question: string) {
     setMsgs((m) => [...m, { from: "you", text: question }]);
@@ -66,8 +71,9 @@ function ChatBody() {
             </span>
           </div>
         ))}
-        {busy && <div className="text-sm text-slate-500">CampusOps is thinking…</div>}
+        {busy && <div className="text-sm text-slate-500 animate-pulse">CampusOps is thinking…</div>}
         {error && <div className="text-sm text-red-600">{error}</div>}
+        <div ref={bottomRef} />
       </div>
       <div className="flex flex-wrap gap-2 mt-3">
         {SUGGESTED.map((s) => (

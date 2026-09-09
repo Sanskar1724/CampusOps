@@ -3,8 +3,15 @@ import { useEffect, useState } from "react";
 import Shell from "@/components/Shell";
 import { api } from "@/lib/api";
 
-export default function Planner() {
-  const [deadlines, setDeadlines] = useState<any[]>([]);
+function urgency(due: string | null): [string, string] {
+  if (!due) return ["no date", "bg-slate-100 text-slate-600"];
+  const ms = new Date(due).getTime() - Date.now();
+  if (ms < 0) return ["overdue", "bg-red-100 text-red-700"];
+  if (ms < 48 * 3600 * 1000) return ["due soon", "bg-amber-100 text-amber-800"];
+  return ["upcoming", "bg-emerald-100 text-emerald-700"];
+}
+
+export default function Planner() {  const [deadlines, setDeadlines] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
   const [reminders, setReminders] = useState<any[]>([]);
   const [exams, setExams] = useState<any[]>([]);
@@ -34,20 +41,30 @@ export default function Planner() {
       <div className="grid gap-4 md:grid-cols-2">
         <div className="card">
           <div className="font-semibold mb-2">Deadlines</div>
-          {deadlines.filter((d) => d.status === "open").map((d) => (
-            <div key={d.id} className="text-sm py-1 flex justify-between">
-              <span>{d.title} <span className="text-xs text-slate-500">({d.due_at || "no date"} · {d.source})</span></span>
-              <button
-                className="text-indigo-600 text-xs"
-                onClick={async () => {
-                  await api(`/api/planner/deadlines/${d.id}/done`, { method: "POST" });
-                  refresh();
-                }}
-              >
-                done
-              </button>
-            </div>
-          ))}
+          {deadlines.filter((d) => d.status === "open").map((d) => {
+            const [label, cls] = urgency(d.due_at);
+            return (
+              <div key={d.id} className="text-sm py-1.5 flex justify-between items-center">
+                <span>
+                  {d.title}{" "}
+                  <span className={`text-xs rounded px-2 py-0.5 ${cls}`}>{label}</span>
+                  <span className="text-xs text-slate-500 block">{d.due_at || "no date"} · {d.source}</span>
+                </span>
+                <button
+                  className="text-indigo-600 text-xs"
+                  onClick={async () => {
+                    await api(`/api/planner/deadlines/${d.id}/done`, { method: "POST" });
+                    refresh();
+                  }}
+                >
+                  done ✓
+                </button>
+              </div>
+            );
+          })}
+          {deadlines.filter((d) => d.status === "open").length === 0 && (
+            <div className="text-sm text-slate-500">🎉 All clear — nothing due.</div>
+          )}
         </div>
         <div className="card">
           <div className="font-semibold mb-2">Exams</div>

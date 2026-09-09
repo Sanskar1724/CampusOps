@@ -65,6 +65,80 @@ def _resolve_date(text: str, now: datetime) -> str | None:
     return None
 
 
+def find_all_dates(text: str, now: datetime) -> list[str]:
+    """Every distinct date mention in reading order (words first, then numeric)."""
+    found: list[str] = []
+    for m in _DATE_WORD.finditer(text):
+        word = m.group(1).lower()
+        delta = {"today": 0, "tomorrow": 1, "day after tomorrow": 2}[word]
+        iso = (now + timedelta(days=delta)).date().isoformat()
+        if iso not in found:
+            found.append(iso)
+    for m in _DMY.finditer(text):
+        day, month, year = int(m.group(1)), int(m.group(2)), m.group(3)
+        y = int(year) + (2000 if year and int(year) < 100 else 0) if year else now.year
+        try:
+            iso = datetime(y, month, day).date().isoformat()
+        except ValueError:
+            continue
+        if iso not in found:
+            found.append(iso)
+    return found
+
+
+def find_all_rooms(text: str) -> list[str]:
+    rooms = [r[0] or r[1] for r in _ROOM.findall(text) if any(r)]
+    return list(dict.fromkeys(rooms))
+
+
+def match_subjects(text: str, subjects: list[str]) -> list[str]:
+    low = text.lower()
+    return [s for s in subjects if s and s.lower() in low]
+
+
+def scan_facts(text: str, subjects: list[str], now: datetime | None = None) -> dict:
+    """Deep scan for long documents: every subject, date, room, plus each
+    deadline/exam/event sentence as an actionable item."""
+    now = now or datetime.now(timezone.utc)
+    kind, priority = classify(text)
+    facts: dict = {
+        "kind": kind, "priority": priority,
+        "subjects": match_subjects(text, subjects),
+        "dates": find_all_dates(text, now),
+        "rooms": find_all_rooms(text),
+        "items": [],
+    }
+    move = _FROM_TO_ROOM.search(text)
+    if move:
+        facts["old_room"], facts["new_room"] = move.group(1), move.group(2)
+    for sentence in re.split(r"(?<=[.!?])\s+", text):
+        if len(sentence) < 25 or len(sentence) > 400:
+            continue
+        slow = sentence.lower()
+        if any(w in slow for w in
+               ["due", "deadline", "submit", "exam", "test on", "viva", "practical",
+                "event", "workshop", "seminar", "holiday", "rescheduled", "postponed",
+                "room", "interview", "placement"]):
+            sub = match_subjects(sentence, subjects)
+            facts["items"].append({
+                "text": sentence.strip()[:300],
+                "kind": classify(sentence)[0],
+                "subject": sub[0] if sub else "",
+                "date": _resolve_date(sentence, now),
+            })
+            if len(facts["items"]) >= 20:
+                break
+    if facts["subjects"]:
+        facts["subject"] = facts["subjects"][0]
+    if facts["dates"]:
+        facts["date"] = facts["dates"][0]
+        if kind in ("assignment", "deadline"):
+            facts["due_date"] = facts["dates"][0]
+    if facts["rooms"] and "new_room" not in facts:
+        facts["new_room"] = facts["rooms"][-1]
+    return facts
+
+
 def extract_facts(text: str, subjects: list[str], now: datetime | None = None) -> dict:
     """Deterministic extraction: subject match, room change, date mention."""
     now = now or datetime.now(timezone.utc)

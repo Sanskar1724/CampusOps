@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from backend.app import models
 from backend.app.ingestion.email_source import student_subjects
-from backend.app.ingestion.extract import enrich_with_llm, extract_facts
+from backend.app.ingestion.extract import enrich_with_llm, scan_facts
 from backend.app.memory import add_chunk
 
 MAX_PDF_BYTES = 10 * 1024 * 1024
@@ -51,7 +51,9 @@ def ingest_document(db: Session, student_id: int, filename: str, mime: str,
         raise ValueError("File exceeds the 10 MB limit.")
     text = extract_text(filename, mime, data)
     if not text.strip():
-        raise ValueError("No readable text found in the document.")
+        raise ValueError(
+            "No readable text found. If this is a scanned/image-only PDF, "
+            "export a text version from your college portal and upload that.")
     doc = models.Document(student_id=student_id, filename=filename, mime=mime,
                           size_bytes=len(data), is_demo=is_demo)
     db.add(doc)
@@ -60,9 +62,18 @@ def ingest_document(db: Session, student_id: int, filename: str, mime: str,
     for idx, piece in enumerate(chunk_text(text)):
         add_chunk(db, doc, idx, piece)
     subjects = student_subjects(db, student_id)
-    facts = enrich_with_llm(text[:4000], extract_facts(text[:4000], subjects))
+    facts = enrich_with_llm(text[:8000], scan_facts(text[:12000], subjects))
     doc.facts_json = json.dumps(facts)
-    if facts.get("due_date"):
+    made_deadline = False
+    for item in facts.get("items", []):
+        if item.get("kind") in ("assignment", "deadline") and item.get("date"):
+            due = datetime.fromisoformat(item["date"]).replace(tzinfo=timezone.utc)
+            db.add(models.Deadline(
+                student_id=student_id, title=f"{filename}: {item['text'][:200]}",
+                subject=item.get("subject", ""), due_at=due,
+                source="pdf", source_id=f"document:{doc.id}:{len(facts.get('items', []))}"))
+            made_deadline = True
+    if facts.get("due_date") and not made_deadline:
         due = datetime.fromisoformat(facts["due_date"]).replace(tzinfo=timezone.utc)
         db.add(models.Deadline(student_id=student_id, title=f"{filename}: {facts.get('kind')}",
                                subject=facts.get("subject", ""), due_at=due,
@@ -72,6 +83,11 @@ def ingest_document(db: Session, student_id: int, filename: str, mime: str,
                                    body=facts.get("summary", text[:1000]),
                                    source="pdf", source_id=f"document:{doc.id}",
                                    priority=facts.get("priority", "normal")))
+    if facts.get("dates") and facts["kind"] == "exam" and facts.get("subjects"):
+        when = datetime.fromisoformat(facts["dates"][0]).replace(tzinfo=timezone.utc)
+        db.add(models.Exam(student_id=student_id, subject=facts["subjects"][0],
+                           title=filename, exam_at=when,
+                           room=(facts.get("rooms") or [""])[0], source="pdf"))
     db.commit()
     db.refresh(doc)
     return doc

@@ -20,7 +20,6 @@ STEPS: list[tuple[str, str]] = [
     ("batch", "Which batch? (e.g. B1)"),
     ("roll_number", "What is your roll number?"),
     ("semester", "Which semester are you in? (e.g. 5)"),
-    ("course", "Which course/program? (e.g. B.Tech)"),
     ("college_email", "Finally, what is your college email address?"),
 ]
 

@@ -375,17 +375,16 @@ def gmail_url(student: models.Student = Depends(Me)):
     redirect = os.environ.get("GMAIL_REDIRECT_URI", "http://localhost:8000/api/integrations/gmail/callback")
     if not client_id:
         raise HTTPException(409, "Gmail OAuth not configured on the server (GMAIL_CLIENT_ID).")
-    return {"auth_url": email_source.gmail_auth_url(client_id, redirect)}
+    state = security.make_oauth_state(student.id)
+    return {"auth_url": email_source.gmail_auth_url(client_id, redirect, state=state)}
 
 
-@integr_router.post("/gmail/callback")
-def gmail_callback(payload: schemas.GmailCallbackIn, db: Session = Depends(get_db),
-                   student: models.Student = Depends(Me)):
+def _connect_gmail(db: Session, student: models.Student, code: str) -> None:
     try:
         tokens = email_source.gmail_exchange_code(
             os.environ.get("GMAIL_CLIENT_ID", ""), os.environ.get("GMAIL_CLIENT_SECRET", ""),
-            payload.code, os.environ.get("GMAIL_REDIRECT_URI",
-                                         "http://localhost:8000/api/integrations/gmail/callback"))
+            code, os.environ.get("GMAIL_REDIRECT_URI",
+                                 "http://localhost:8000/api/integrations/gmail/callback"))
     except Exception as exc:
         raise HTTPException(502, f"Gmail OAuth failed: {exc}")
     integ = db.scalar(select(models.Integration).where(
@@ -398,6 +397,30 @@ def gmail_callback(payload: schemas.GmailCallbackIn, db: Session = Depends(get_d
                                   "refresh_token": tokens.get("refresh_token", "")})
     integ.updated_at = utcnow()
     db.commit()
+
+
+@integr_router.get("/gmail/callback")
+def gmail_callback_get(code: str = "", state: str = "", db: Session = Depends(get_db)):
+    """Google redirects here (GET) after the student clicks Allow. The signed
+    `state` tells us which student approved, so no login is needed on this hop."""
+    if not code:
+        raise HTTPException(400, "Missing code from Google.")
+    student = db.get(models.Student, security.read_oauth_state(state))
+    if student is None:
+        raise HTTPException(400, "Unknown student for this OAuth flow.")
+    _connect_gmail(db, student, code)
+    from fastapi.responses import HTMLResponse  # noqa: E402
+    return HTMLResponse(
+        "<body style='font-family:sans-serif;text-align:center;padding-top:15%'>"
+        "<h2>Gmail connected ✓</h2>"
+        "<p>You can close this tab and press Refresh in CampusOps.</p></body>")
+
+
+@integr_router.post("/gmail/callback")
+def gmail_callback(payload: schemas.GmailCallbackIn, db: Session = Depends(get_db),
+                   student: models.Student = Depends(Me)):
+    """Manual paste fallback (Settings → Finish button)."""
+    _connect_gmail(db, student, payload.code)
     return {"status": "connected"}
 
 

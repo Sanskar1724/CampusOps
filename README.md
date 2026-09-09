@@ -18,11 +18,14 @@ STUDENT ─▶ CASPIAN SDK ─▶ comms/ ─▶ Core Agent ─┬─ memory (Pos
 python -m scripts.init_db --seed
 python -m uvicorn backend.app.main:app --port 8000   # API + docs at /docs
 python -m backend.app.jobs.worker                     # briefs + reminders (separate shell)
-cd frontend; npm install; npm run dev                 # web UI on :3000
+cd frontend; npm install; npm run dev                 # web UI on :3001
 ```
 
 Demo login: `demo.student@example.com` / `demo1234` (seeded timetable, emails,
-deadlines, room-change notice, document).
+deadlines, room-change notice, document). Ports: API `:8000`, web `:3001`.
+Sign-in options: password or **Continue with Google** (needs the same Google
+OAuth client as Gmail sync, plus redirect URI
+`http://localhost:3001/auth/google/callback` in its authorized list).
 
 Live messaging needs `CASPIAN_API_KEY` + `CAMPUSOPS_MAILBOX` (see
 `.env.example`), then `python -m backend.app.comms.runner` and message the

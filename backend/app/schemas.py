@@ -113,3 +113,8 @@ class MemoryIn(BaseModel):
 
 class GmailCallbackIn(BaseModel):
     code: str
+
+
+class GoogleCallbackIn(BaseModel):
+    code: str
+    redirect_uri: str

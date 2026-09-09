@@ -53,6 +53,9 @@ export default function Settings() {
               Disconnect
             </button>
           )}
+          <button className="btn-ghost" onClick={refresh}>
+            Refresh status
+          </button>
         </div>
         <form
           className="flex gap-2"

@@ -43,7 +43,7 @@ def seed_timetable(db_session, student):
 def test_onboarding_conversation_completes(db_session):
     student = get_or_create_student_for_sender(db_session, "newbie@example.com")
     answers = ["Rahul Patil", "PRN123", "Computer Engineering", "A", "B1",
-               "42", "5", "B.Tech", "rahul@college.edu"]
+               "42", "5", "rahul@college.edu"]
     replies = [handle_turn(db_session, student, a) for a in answers]
     assert "PRN" in replies[0]
     assert "saved" in replies[-1].lower() or "anything" in replies[-1].lower()

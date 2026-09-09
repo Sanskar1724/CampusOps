@@ -132,17 +132,31 @@ class GmailSource:
         return items
 
 
-def gmail_auth_url(client_id: str, redirect_uri: str) -> str:
+def gmail_auth_url(client_id: str, redirect_uri: str, state: str = "",
+                   extra_scope: str = "") -> str:
     from urllib.parse import urlencode
-    return ("https://accounts.google.com/o/oauth2/v2/auth?" + urlencode({
+    scope = "https://www.googleapis.com/auth/gmail.readonly openid email profile"
+    if extra_scope:
+        scope += f" {extra_scope}"
+    params = {
         "client_id": client_id, "redirect_uri": redirect_uri,
-        "response_type": "code", "scope": "https://www.googleapis.com/auth/gmail.readonly",
-        "access_type": "offline", "prompt": "consent"}))
+        "response_type": "code", "scope": scope,
+        "access_type": "offline", "prompt": "consent"}
+    if state:
+        params["state"] = state
+    return "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params)
 
 
 def gmail_exchange_code(client_id: str, client_secret: str, code: str, redirect_uri: str) -> dict:
     resp = httpx.post("https://oauth2.googleapis.com/token", data={
         "client_id": client_id, "client_secret": client_secret, "code": code,
         "grant_type": "authorization_code", "redirect_uri": redirect_uri}, timeout=30)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def google_userinfo(access_token: str) -> dict:
+    resp = httpx.get("https://openidconnect.googleapis.com/v1/userinfo",
+                     headers={"Authorization": f"Bearer {access_token}"}, timeout=30)
     resp.raise_for_status()
     return resp.json()

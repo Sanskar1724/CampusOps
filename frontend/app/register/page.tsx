@@ -12,7 +12,6 @@ const FIELDS = [
   ["batch", "Batch"],
   ["roll_number", "Roll number"],
   ["semester", "Semester"],
-  ["course", "Course"],
   ["college_email", "College email"],
 ] as const;
 

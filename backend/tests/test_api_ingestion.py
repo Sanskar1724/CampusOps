@@ -107,3 +107,55 @@ def test_cross_student_access_blocked(db_session):
 def test_pdf_text_extraction_unit():
     text = pdf_source.extract_text("a.pdf", "application/pdf", MINIMAL_PDF)
     assert "DBMS" in text
+
+
+def test_pdf_deep_scan_finds_all_facts():
+    from datetime import datetime, timezone
+
+    from backend.app.ingestion.extract import scan_facts
+    facts = scan_facts(
+        "DBMS assignment due 12/09. OS exam on 15/09 in Room 402. "
+        "Holiday on 20/09. DBMS lecture moved from Room 301 to Room 405.",
+        ["DBMS", "OS"], now=datetime(2026, 9, 9, tzinfo=timezone.utc))
+    assert set(facts["subjects"]) == {"DBMS", "OS"}
+    assert "2026-09-12" in facts["dates"] and "2026-09-15" in facts["dates"]
+    assert facts["new_room"] == "405" and facts["old_room"] == "301"
+    assert any(i["kind"] == "exam" for i in facts["items"])
+
+
+def test_google_signin_creates_and_logs_in(db_session, monkeypatch):
+    import backend.app.api.auth as auth_mod
+    monkeypatch.setattr(auth_mod.email_source, "gmail_exchange_code",
+                        lambda *a: {"access_token": "tok"})
+    monkeypatch.setattr(auth_mod.email_source, "google_userinfo",
+                        lambda t: {"email": "guser@college.edu", "name": "G User",
+                                   "sub": "g123"})
+    first = client.post("/api/auth/google/callback",
+                        json={"code": "c", "redirect_uri": "http://x/cb"})
+    assert first.status_code == 200, first.text
+    me = client.get("/api/auth/me",
+                    headers={"Authorization": f"Bearer {first.json()['access_token']}"})
+    assert me.json()["onboarding_status"] == "pending"
+    second = client.post("/api/auth/google/callback",
+                         json={"code": "c", "redirect_uri": "http://x/cb"})
+    assert second.status_code == 200  # existing user logs straight in
+
+
+def test_gmail_get_callback_connects(db_session, monkeypatch):
+    import backend.app.api.resources as res_mod
+    from backend.app import security
+    headers = register("gmailt@college.edu", "GM1")
+    me = client.get("/api/auth/me", headers=headers).json()
+    monkeypatch.setattr(res_mod.email_source, "gmail_exchange_code",
+                        lambda *a: {"access_token": "tok", "refresh_token": "ref"})
+    state = security.make_oauth_state(me["id"])
+    resp = client.get("/api/integrations/gmail/callback",
+                      params={"code": "c", "state": state})
+    assert resp.status_code == 200 and "connected" in resp.text.lower()
+
+    def _boom(self, db, student_id, max_results=20):
+        raise ConnectionError("no network in tests")
+
+    monkeypatch.setattr(res_mod.email_source.GmailSource, "fetch", _boom)
+    sync = client.post("/api/email/sync", headers=headers)
+    assert sync.status_code == 502  # fetch failure surfaces cleanly

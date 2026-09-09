@@ -47,6 +47,23 @@ def make_token(student_id: int) -> str:
     return jwt.encode({"sub": str(student_id), "exp": exp}, SECRET, algorithm=ALGORITHM)
 
 
+def make_oauth_state(student_id: int) -> str:
+    """Short-lived signed state for OAuth redirects (binds flow to a student)."""
+    exp = datetime.now(timezone.utc) + timedelta(minutes=10)
+    return jwt.encode({"sub": str(student_id), "exp": exp, "kind": "oauth"},
+                      SECRET, algorithm=ALGORITHM)
+
+
+def read_oauth_state(state: str) -> int:
+    try:
+        payload = jwt.decode(state, SECRET, algorithms=[ALGORITHM])
+        if payload.get("kind") != "oauth":
+            raise ValueError("not oauth state")
+        return int(payload.get("sub", "0"))
+    except (JWTError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"Bad OAuth state: {exc}")
+
+
 def get_current_student(
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
     db: Session = Depends(get_db),
