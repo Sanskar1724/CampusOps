@@ -1,0 +1,7 @@
+{
+  "/chat/page": "app/chat/page.js",
+  "/timetable/page": "app/timetable/page.js",
+  "/tasks/page": "app/tasks/page.js",
+  "/notifications/page": "app/notifications/page.js",
+  "/dashboard/page": "app/dashboard/page.js"
+}

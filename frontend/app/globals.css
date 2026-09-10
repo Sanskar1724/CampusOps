@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+}
+.card {
+  @apply bg-white rounded-xl border border-slate-200 shadow-sm p-5;
+}
+.btn {
+  @apply inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50;
+}
+.btn-ghost {
+  @apply inline-flex items-center justify-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-100;
+}
+.input {
+  @apply w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500;
+}
+.label {
+  @apply block text-xs font-medium text-slate-600 mb-1;
+}
+.navlink {
+  @apply block rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900;
+}
+.navlink-active {
+  @apply bg-indigo-50 text-indigo-700;
+}
+.badge {
+  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold;
+}
+.badge-live {
+  @apply bg-emerald-100 text-emerald-700;
+}
+.badge-urgent {
+  @apply bg-red-100 text-red-700;
+}
+.badge-soon {
+  @apply bg-amber-100 text-amber-800;
+}
+.badge-ok {
+  @apply bg-emerald-100 text-emerald-700;
+}
+.badge-info {
+  @apply bg-indigo-100 text-indigo-700;
+}
+.prompt-card {
+  @apply text-left bg-white border border-slate-200 rounded-xl p-3 text-sm hover:border-indigo-400 hover:shadow-md transition cursor-pointer;
+}

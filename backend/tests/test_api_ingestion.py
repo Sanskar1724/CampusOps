@@ -1,0 +1,256 @@
+"""API + PDF ingestion tests (isolated DB, TestClient)."""
+
+from fastapi.testclient import TestClient
+
+from backend.app.ingestion import pdf_source
+from backend.app.main import app
+
+client = TestClient(app, raise_server_exceptions=False)
+
+def _build_pdf(payload_text: bytes) -> bytes:
+    objs = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        (b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+         b"/Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>"),
+        b"<< /Length %d >>\nstream\n" % len(payload_text) + payload_text + b"\nendstream",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    out = b"%PDF-1.4\n"
+    offsets = []
+    for i, body in enumerate(objs, 1):
+        offsets.append(len(out))
+        out += b"%d 0 obj\n" % i + body + b"\nendobj\n"
+    xref_at = len(out)
+    out += b"xref\n0 %d\n" % (len(objs) + 1)
+    out += b"0000000000 65535 f \n"
+    for off in offsets:
+        out += b"%010d 00000 n \n" % off
+    out += (b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n"
+            % (len(objs) + 1, xref_at))
+    return out
+
+
+MINIMAL_PDF = _build_pdf(
+    b"BT /F1 12 Tf 72 720 Td (DBMS mid-semester exam Monday 10am Room 405.) Tj ET")
+
+
+def register(email="api@college.edu", prn="API1"):
+    resp = client.post("/api/auth/register", json={
+        "full_name": "Api User", "prn": prn, "department": "CE", "division": "A",
+        "batch": "B1", "roll_number": "7", "semester": "5", "course": "B.Tech",
+        "college_email": email, "password": "secret123"})
+    assert resp.status_code == 200, resp.text
+    return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+
+def test_register_login_and_profile(db_session):
+    headers = register()
+    assert client.get("/api/auth/me", headers=headers).status_code == 200
+    bad = client.post("/api/auth/login",
+                      json={"college_email": "api@college.edu", "password": "wrong"})
+    assert bad.status_code == 401
+
+
+def test_timetable_crud_and_chat(db_session):
+    headers = register("tt@college.edu", "TT1")
+    entry = {"day": 2, "subject": "DBMS", "start_time": "09:00",
+             "end_time": "10:00", "room": "301"}
+    assert client.post("/api/timetable/", json=entry, headers=headers).status_code == 200
+    assert len(client.get("/api/timetable/", headers=headers).json()) == 1
+    chat = client.post("/api/chat/", json={"text": "What is my next class?"},
+                       headers=headers)
+    assert chat.status_code == 200 and "DBMS" in chat.json()["reply"]
+
+
+def test_deadline_task_flow(db_session):
+    headers = register("plan@college.edu", "PL1")
+    assert client.post("/api/planner/deadlines",
+                       json={"title": "OS lab record", "due_at": "2026-09-12T17:00:00Z"},
+                       headers=headers).status_code == 200
+    assert client.post("/api/planner/tasks", json={"title": "Revise indexing"},
+                       headers=headers).status_code == 200
+    assert len(client.get("/api/planner/deadlines", headers=headers).json()) == 1
+
+
+def test_pdf_upload_and_search(db_session):
+    headers = register("doc@college.edu", "DOC1")
+    client.post("/api/timetable/",
+                json={"day": 0, "subject": "DBMS", "start_time": "09:00",
+                      "end_time": "10:00", "room": "301"},
+                headers=headers)
+    resp = client.post("/api/documents/upload",
+                       files={"file": ("calendar.pdf", MINIMAL_PDF, "application/pdf")},
+                       headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["facts"].get("subject") == "DBMS"
+    hits = client.get("/api/documents/search", params={"q": "DBMS exam"},
+                      headers=headers).json()
+    assert hits and "DBMS" in hits[0]["text"]
+    bad = client.post("/api/documents/upload",
+                      files={"file": ("evil.exe", b"MZ", "application/octet-stream")},
+                      headers=headers)
+    assert bad.status_code == 400
+
+
+def test_cross_student_access_blocked(db_session):
+    alice = register("alice@college.edu", "AL1")
+    bob = register("bob@college.edu", "BO1")
+    entry_id = client.post(
+        "/api/timetable/",
+        json={"day": 0, "subject": "Secret", "start_time": "09:00", "end_time": "10:00"},
+        headers=alice).json()["id"]
+    assert client.delete(f"/api/timetable/{entry_id}", headers=bob).status_code == 404
+    assert client.get("/api/timetable/", headers=bob).json() == []
+
+
+def test_pdf_text_extraction_unit():
+    text = pdf_source.extract_text("a.pdf", "application/pdf", MINIMAL_PDF)
+    assert "DBMS" in text
+
+
+def test_pdf_deep_scan_finds_all_facts():
+    from datetime import datetime, timezone
+
+    from backend.app.ingestion.extract import scan_facts
+    facts = scan_facts(
+        "DBMS assignment due 12/09. OS exam on 15/09 in Room 402. "
+        "Holiday on 20/09. DBMS lecture moved from Room 301 to Room 405.",
+        ["DBMS", "OS"], now=datetime(2026, 9, 9, tzinfo=timezone.utc))
+    assert set(facts["subjects"]) == {"DBMS", "OS"}
+    assert "2026-09-12" in facts["dates"] and "2026-09-15" in facts["dates"]
+    assert facts["new_room"] == "405" and facts["old_room"] == "301"
+    assert any(i["kind"] == "exam" for i in facts["items"])
+
+
+def test_google_signin_creates_and_logs_in(db_session, monkeypatch):
+    import backend.app.api.auth as auth_mod
+    monkeypatch.setattr(auth_mod.email_source, "gmail_exchange_code",
+                        lambda *a: {"access_token": "tok"})
+    monkeypatch.setattr(auth_mod.email_source, "google_userinfo",
+                        lambda t: {"email": "guser@college.edu", "name": "G User",
+                                   "sub": "g123"})
+    first = client.post("/api/auth/google/callback",
+                        json={"code": "c", "redirect_uri": "http://x/cb"})
+    assert first.status_code == 200, first.text
+    me = client.get("/api/auth/me",
+                    headers={"Authorization": f"Bearer {first.json()['access_token']}"})
+    assert me.json()["onboarding_status"] == "pending"
+    second = client.post("/api/auth/google/callback",
+                         json={"code": "c", "redirect_uri": "http://x/cb"})
+    assert second.status_code == 200  # existing user logs straight in
+
+
+def test_gmail_get_callback_connects(db_session, monkeypatch):
+    import backend.app.api.resources as res_mod
+    from backend.app import security
+    headers = register("gmailt@college.edu", "GM1")
+    me = client.get("/api/auth/me", headers=headers).json()
+    monkeypatch.setattr(res_mod.email_source, "gmail_exchange_code",
+                        lambda *a: {"access_token": "tok", "refresh_token": "ref"})
+    state = security.make_oauth_state(me["id"])
+    resp = client.get("/api/integrations/gmail/callback",
+                      params={"code": "c", "state": state})
+    assert resp.status_code == 200 and "connected" in resp.text.lower()
+
+    def _boom(self, db, student_id, max_results=20):
+        raise ConnectionError("no network in tests")
+
+    monkeypatch.setattr(res_mod.email_source.GmailSource, "fetch", _boom)
+    sync = client.post("/api/email/sync", headers=headers)
+    assert sync.status_code == 502  # fetch failure surfaces cleanly
+
+
+def _doc_pdf_bytes(lines: list[str]) -> bytes:
+    body = b"".join(b"BT /F1 12 Tf 72 %d Td (%s) Tj ET\n" % (720 - i * 20, line.encode())
+                    for i, line in enumerate(lines))
+    return _build_pdf(body)
+
+
+def test_timetable_from_document_scan(db_session):
+    headers = register("ttdoc@college.edu", "TTD1")
+    pdf = _doc_pdf_bytes(["Monday 09:00-10:00 DBMS Room 301",
+                          "Tuesday 11:00-12:00 OS Room 302"])
+    resp = client.post("/api/timetable/from-document",
+                       files={"file": ("tt.pdf", pdf, "application/pdf")},
+                       headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["entries"] == 2
+    assert len(client.get("/api/timetable/", headers=headers).json()) == 2
+    bad = client.post("/api/timetable/from-document",
+                      files={"file": ("tt.pdf", MINIMAL_PDF, "application/pdf")},
+                      headers=headers)
+    assert bad.status_code == 400  # exam notice has no weekday+time rows
+
+
+def test_system_status_board(db_session):
+    headers = register("sys@college.edu", "SYS1")
+    resp = client.get("/api/system/status", headers=headers)
+    assert resp.status_code == 200
+    names = {c["name"] for c in resp.json()["checks"]}
+    assert {"database", "ai_model", "caspian_gateway", "telegram", "gmail"} <= names
+    assert resp.json()["checks"][0]["ok"] is True  # database
+    assert client.get("/api/system/status").status_code == 401  # auth required
+
+
+def test_garbage_detector():
+    from backend.app.ingestion.extract import garbage_score, is_garbage_text
+    assert garbage_score("DBMS mid-semester exam Monday Room 405") < 0.3
+    salad = "; n ; ; $ * Ess e rcc;E-tj t $ 9: j i F H *"
+    assert garbage_score(salad * 10) > 0.6
+    assert is_garbage_text(salad * 10, raw_bytes_len=50000) is True
+
+
+def test_multiformat_extraction():
+    from backend.app.ingestion.pdf_source import extract_any_text
+    text, method = extract_any_text("n.txt", "text/plain", b"DBMS exam on 12/09")
+    assert "DBMS" in text and method == "text"
+    text, method = extract_any_text("n.csv", "text/csv", b"day,subject\nMon,DBMS")
+    assert "DBMS" in text
+    from openpyxl import Workbook
+    import io as _io
+    wb = Workbook()
+    wb.active.append(["Subject", "Date"])
+    wb.active.append(["OS", "15/09"])
+    buf = _io.BytesIO()
+    wb.save(buf)
+    text, method = extract_any_text("n.xlsx",
+                                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                    buf.getvalue())
+    assert "OS" in text and method == "xlsx"
+    from docx import Document as _Docx
+    buf = _io.BytesIO()
+    d = _Docx()
+    d.add_paragraph("CN assignment due Friday")
+    d.save(buf)
+    text, method = extract_any_text(
+        "n.docx",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        buf.getvalue())
+    assert "CN assignment" in text and method == "docx"
+
+
+def test_scanned_pdf_uses_vision_ocr(db_session, monkeypatch):
+    import backend.app.ingestion.pdf_source as pdf_mod
+    monkeypatch.setattr(pdf_mod, "_layout_text", lambda data: "; n ; $ * Ess " * 60)
+    monkeypatch.setattr(pdf_mod, "_ocr_pdf_pages",
+                        lambda data: "Monday 09:00-10:00 DBMS Room 301")
+    text, method = pdf_mod.extract_pdf_text(b"x" * 50000)
+    assert method == "vision-ocr" and "DBMS" in text
+
+
+def test_hybrid_search_skips_garbage(db_session):
+    from backend.app import models
+    from backend.app.memory import add_chunk, semantic_search
+    headers = register("hyb@college.edu", "HYB1")
+    me = client.get("/api/auth/me", headers=headers).json()
+    doc = models.Document(student_id=me["id"], filename="real.pdf",
+                          mime="application/pdf", size_bytes=10)
+    db_session.add(doc)
+    db_session.commit()
+    db_session.refresh(doc)
+    add_chunk(db_session, doc, 0, "DBMS mid-semester exam on Monday in Room 405")
+    add_chunk(db_session, doc, 99, "; n ; $ * Ess " * 40)  # forced-in garbage
+    hits = semantic_search(db_session, me["id"], "DBMS exam")
+    assert hits and all("Ess" not in h["text"][:20] for h in hits)
+    assert hits[0]["score"] > 0.3  # keyword recall lifts the real match
