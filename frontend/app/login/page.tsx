@@ -30,7 +30,21 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-indigo-50 via-white to-slate-100">
       <div className="w-full max-w-sm space-y-3">
       <form onSubmit={submit} className="card w-full space-y-4">
-        <h1 className="text-xl font-bold">Sign in to CampusOps</h1>
+        <h1 className="text-xl font-bold">🎓 Sign in to CampusOps</h1>
+        <div className="text-xs bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg p-2.5">
+          ⚡ <span className="font-semibold">Hackathon demo?</span> One click, no setup — full timetable, emails & deadlines preloaded.
+        </div>
+        <button
+          type="button"
+          className="btn w-full !bg-emerald-600 hover:!bg-emerald-700"
+          onClick={() => {
+            setEmail("demo.student@example.com");
+            setPassword("demo1234");
+            setError("");
+          }}
+        >
+          ⚡ Fill demo login instantly
+        </button>
         {error && <div className="text-sm text-red-600">{error}</div>}
         <div>
           <label className="label">College email</label>

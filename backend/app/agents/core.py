@@ -81,7 +81,8 @@ def handle_turn(db: Session, student: models.Student, text: str,
         "docs": any(w in low for w in
                     ["document", "pdf", "search", "find", "notice", "rule"]),
         "plan": any(w in low for w in
-                    ["focus", "plan", "priorit", "brief", "morning", "do today", "summary of today"]),
+                    ["focus", "plan", "priorit", "brief", "morning", "do today", "summary of today",
+                     "do now", "what next", "right now"]),
     }
 
     reminder = _parse_reminder(text, now)
@@ -96,19 +97,27 @@ def handle_turn(db: Session, student: models.Student, text: str,
 
     if wants["plan"] or not any(wants.values()):
         plan = tools.generate_daily_plan(c)
+        focus = tools.get_focus_now(c)
         sections.append(f"Today ({DAY_NAMES[now.weekday()]}): {_fmt_classes(plan['today'])}.")
         sections.append(f"Next class: {plan['next_class']['subject']} "
                         f"{plan['next_class']['start']} Room {plan['next_class']['room'] or '—'}"
                         if plan["next_class"] else "Next class: none scheduled.")
         dl = plan["deadlines"]
-        sections.append("Deadlines: " + ("; ".join(
-            f"{d['title']} (due {d['due']})" for d in dl) if dl else "none open."))
+        if dl:
+            ranked_lines = []
+            for d in dl[:5]:
+                _, label = tools.urgency_score(d, now)
+                ranked_lines.append(f"{d['title']} (due {d['due']}) [{label}]")
+            sections.append("Deadlines (ranked): " + "; ".join(ranked_lines) + ".")
+        else:
+            sections.append("Deadlines: none open.")
         ex = plan["exams"][:3]
         sections.append("Exams: " + ("; ".join(
             f"{e['subject']} at {e['at']}" for e in ex) if ex else "none scheduled."))
         imp = plan["important"][:3]
         sections.append("Important: " + ("; ".join(
             f"{i['title']} [{i['priority']}]" for i in imp) if imp else "nothing new."))
+        sections.append(f"🎯 Do now: {focus['do_now']}")
     else:
         if wants["schedule"]:
             sections.append(f"Today: {_fmt_classes(tools.get_today_schedule(c))}.")

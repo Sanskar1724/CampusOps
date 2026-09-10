@@ -81,10 +81,16 @@ tt_router = APIRouter(prefix="/api/timetable", tags=["timetable"])
 
 
 @tt_router.get("/")
-def list_tt(db: Session = Depends(get_db), student: models.Student = Depends(Me)):
+def list_tt(db: Session = Depends(get_db), student: models.Student = Depends(Me),
+            scope: str = "all"):
+    """Weekly timetable, day+time sorted. `scope=mine` keeps only rows that
+    apply to the student's division/batch (blank row fields = everyone)."""
     rows = list(db.scalars(select(models.TimetableEntry).where(
         models.TimetableEntry.student_id == student.id)
         .order_by(models.TimetableEntry.day, models.TimetableEntry.start_time)))
+    if scope == "mine":
+        rows = [r for r in rows if timetable_source.applies_to(
+            r.division, r.batch, student.division, student.batch)]
     return [schemas.TimetableOut.model_validate(r).model_dump() for r in rows]
 
 
@@ -134,27 +140,73 @@ async def upload_tt(file: UploadFile = File(...), db: Session = Depends(get_db),
     return {"entries": count}
 
 
+@tt_router.post("/from-text")
+def timetable_from_text(payload: schemas.ChatIn, db: Session = Depends(get_db),
+                        student: models.Student = Depends(Me)):
+    """Paste timetable text (copy-paste from portal/PDF) — no OCR needed.
+
+    Accepts lines like 'Monday 09:00-10:00 DBMS Room 301'. Returns the
+    detected rows so the UI can show what changed before/after replace."""
+    try:
+        rows = timetable_source.extract_timetable_from_text(payload.text)
+        count = timetable_source.replace_timetable(db, student.id, rows, source="paste")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return {"entries": count, "rows": rows}
+
+
 @tt_router.post("/from-document")
 async def timetable_from_document(file: UploadFile = File(...),
                                   db: Session = Depends(get_db),
                                   student: models.Student = Depends(Me)):
-    """Scan a PDF (or photo, when OCR is installed) and adopt detected rows."""
+    """Scan a PDF timetable (or photo) and adopt detected rows.
+
+    Tries the digital text layer first; if no weekday+time rows are found,
+    retries with vision OCR, which reads visual table layout better. Only
+    replaces the timetable when rows were actually detected."""
     from backend.app.ingestion import pdf_source  # noqa: E402
     data = await file.read()
     mime = file.content_type or ""
+    name = file.filename or "timetable.pdf"
     if mime == "application/pdf" and len(data) > pdf_source.MAX_PDF_BYTES:
         raise HTTPException(400, "File exceeds the 10 MB limit.")
     if mime in pdf_source.IMAGE_MIME and len(data) > pdf_source.MAX_IMAGE_BYTES:
         raise HTTPException(400, "Image exceeds the 5 MB limit.")
     if mime not in {pdf_source.PDF_MIME} | pdf_source.IMAGE_MIME:
-        raise HTTPException(400, "Upload a PDF timetable (photos work once an OCR engine is installed).")
+        raise HTTPException(400, "Upload a PDF timetable or a PNG/JPG photo of it.")
     try:
-        text = pdf_source.extract_text(file.filename or "timetable.pdf", mime, data)
-        rows = timetable_source.extract_timetable_from_text(text)
-        count = timetable_source.replace_timetable(db, student.id, rows, source="pdf-scan")
+        text, method = pdf_source.extract_any_text(name, mime, data)
     except ValueError as exc:
-        raise HTTPException(400, str(exc))
-    return {"entries": count, "rows": rows}
+        raise HTTPException(400,
+                            f"Could not read the file ({exc}). If it is a photo, "
+                            "retake it straight-on in good light; otherwise upload "
+                            "the CSV export or paste the text.")
+    try:
+        rows = timetable_source.extract_timetable_from_text(text)
+        used = method
+    except ValueError:
+        # Second chance: the text layer exists but is jumbled (common with
+        # table PDFs) — vision OCR reads the visual layout instead.
+        if method in ("text-layer", "text", "csv", "xlsx", "docx"):
+            try:
+                if mime in pdf_source.IMAGE_MIME:
+                    text = pdf_source.ocr_image(data)
+                else:
+                    text = pdf_source.ocr_pdf(data)
+                rows = timetable_source.extract_timetable_from_text(text)
+                used = "vision-ocr-retry"
+            except Exception as exc:
+                raise HTTPException(400,
+                                    f"No timetable rows found (tried text + OCR retry: {str(exc)[:160]}). "
+                                    f"Seen text started with: {text[:200]!r}. Upload the CSV "
+                                    "export from your portal or use Paste timetable text.")
+        else:
+            raise HTTPException(400,
+                                f"No timetable rows found. Seen text started with: {text[:200]!r}. "
+                                "Upload the CSV export from your portal or use Paste timetable text.")
+    count = timetable_source.replace_timetable(db, student.id, rows, source="pdf-scan")
+    return {"entries": count, "rows": rows, "method": used,
+            "preview": text[:300]}
 
 
 # ---------- email intelligence ----------
@@ -353,6 +405,14 @@ def list_exams(db: Session = Depends(get_db), student: models.Student = Depends(
         models.Exam.student_id == student.id).order_by(models.Exam.exam_at)))
     return [{"id": e.id, "subject": e.subject, "title": e.title,
              "exam_at": e.exam_at, "room": e.room} for e in rows]
+
+
+@plan_router.get("/focus")
+def focus_now(db: Session = Depends(get_db), student: models.Student = Depends(Me)):
+    """Killer endpoint: ranked 'do this NOW' — powers dashboard hero + demo."""
+    from backend.app.agents.tools import Ctx, get_focus_now
+    from backend.app.models import utcnow as _utcnow
+    return get_focus_now(Ctx(db=db, student=student, now=_utcnow()))
 
 
 # ---------- notifications ----------

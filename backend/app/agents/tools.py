@@ -24,11 +24,8 @@ class Ctx:
 
 
 def _applies(entry: models.TimetableEntry, student: models.Student) -> bool:
-    if entry.division and student.division and entry.division != student.division:
-        return False
-    if entry.batch and student.batch and entry.batch != student.batch:
-        return False
-    return True
+    from backend.app.ingestion.timetable_source import applies_to
+    return applies_to(entry.division, entry.batch, student.division, student.batch)
 
 
 def _fmt(entries: list[models.TimetableEntry]) -> list[dict]:
@@ -164,3 +161,49 @@ def generate_daily_plan(c: Ctx) -> dict:
             "exams": get_upcoming_exams(c, days=14),
             "important": get_important_updates(c, limit=5),
             "tasks": get_tasks(c)}
+
+
+def urgency_score(deadline: dict, now: datetime) -> tuple[int, str]:
+    """Hackathon-winning ranker: overdue > due <24h > due <48h > high priority > rest."""
+    due_raw = deadline.get("due")
+    try:
+        due = datetime.fromisoformat(str(due_raw)) if due_raw else None
+    except (ValueError, TypeError):
+        due = None
+    if due is not None and due.tzinfo is None:
+        due = due.replace(tzinfo=timezone.utc)
+    if due is not None and due <= now:
+        return (0, "🔴 OVERDUE")
+    if due is not None and due <= now + timedelta(hours=24):
+        return (1, "🟠 due <24h")
+    if due is not None and due <= now + timedelta(hours=48):
+        return (2, "🟡 due <48h")
+    if str(deadline.get("priority", "")).lower() == "high":
+        return (3, "🔥 high priority")
+    return (4, "🟢 upcoming")
+
+
+def get_focus_now(c: Ctx) -> dict:
+    """Killer feature: single ranked 'do this NOW' answer for dashboard + chat."""
+    plan = generate_daily_plan(c)
+    ranked = sorted(plan["deadlines"], key=lambda d: urgency_score(d, c.now))
+    next_cls = plan["next_class"]
+    top_urgent = next((i for i in plan["important"] if i.get("priority") == "high"), None)
+    if ranked:
+        top = ranked[0]
+        score, label = urgency_score(top, c.now)
+        do_now = f"{top['title']} ({label}, due {top['due']})" if top.get("due") else top["title"]
+    elif next_cls:
+        do_now = f"Attend {next_cls['subject']} at {next_cls['start']} (Room {next_cls.get('room') or '—'})"
+    elif top_urgent:
+        do_now = f"Read: {top_urgent['title']}"
+    else:
+        do_now = "You're all clear — revise ahead 30 min 🎉"
+    return {
+        "do_now": do_now,
+        "next_class": next_cls,
+        "top_deadlines": ranked[:3],
+        "top_alert": top_urgent,
+        "today_count": len(plan["today"]),
+        "open_deadlines": len(plan["deadlines"]),
+    }

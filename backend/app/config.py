@@ -15,8 +15,11 @@ CASPIAN_ALLOWED_SENDERS = {
 }
 
 HELLO_TRIGGER = "hello campusops"
-HELLO_REPLY = "Hello! I'm CampusOps, your personal academic agent."
+HELLO_REPLY = (
+    "Hello! I'm CampusOps 🎓 — your academic co-pilot. I track your classes, "
+    "deadlines & inbox. Try: 'What should I focus on today?' or 'Did my timetable change?'"
+)
 FALLBACK_REPLY = (
-    "Hi! I'm CampusOps. Say 'Hello CampusOps' to check I'm alive — "
-    "more academic skills land here as the agent grows."
+    "Hi! I'm CampusOps 🎓. Ask me 'What should I focus on today?', "
+    "'What's my next class?', or say 'Hello CampusOps' to check I'm alive."
 )

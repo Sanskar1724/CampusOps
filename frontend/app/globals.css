@@ -26,3 +26,24 @@ body {
 .navlink-active {
   @apply bg-indigo-50 text-indigo-700;
 }
+.badge {
+  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold;
+}
+.badge-live {
+  @apply bg-emerald-100 text-emerald-700;
+}
+.badge-urgent {
+  @apply bg-red-100 text-red-700;
+}
+.badge-soon {
+  @apply bg-amber-100 text-amber-800;
+}
+.badge-ok {
+  @apply bg-emerald-100 text-emerald-700;
+}
+.badge-info {
+  @apply bg-indigo-100 text-indigo-700;
+}
+.prompt-card {
+  @apply text-left bg-white border border-slate-200 rounded-xl p-3 text-sm hover:border-indigo-400 hover:shadow-md transition cursor-pointer;
+}

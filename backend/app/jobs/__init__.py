@@ -14,36 +14,58 @@ from backend.app.agents.tools import Ctx, generate_daily_plan
 from backend.app.comms.proactive import deliver_queued, notify_student, queue_notification
 from backend.app.models import utcnow
 
-BRIEF_EMOJI = "👋"
+BRIEF_EMOJI = "🌅"
+
+
+def _countdown(due_raw: str | None, now: datetime) -> str:
+    if not due_raw:
+        return "no date"
+    try:
+        due = datetime.fromisoformat(str(due_raw))
+    except (ValueError, TypeError):
+        return str(due_raw)
+    if due.tzinfo is None:
+        due = due.replace(tzinfo=timezone.utc)
+    delta = due - now
+    if delta.total_seconds() < 0:
+        return "🔴 OVERDUE"
+    hours = int(delta.total_seconds() // 3600)
+    if hours < 24:
+        return f"🟠 in {hours}h"
+    return f"🟡 in {hours // 24}d"
 
 
 def build_daily_brief(db: Session, student: models.Student, now: datetime) -> tuple[str, str]:
+    from backend.app.agents.tools import Ctx, generate_daily_plan, get_focus_now, urgency_score
     plan = generate_daily_plan(Ctx(db=db, student=student, now=now))
-    lines = [f"GOOD MORNING {BRIEF_EMOJI} {student.full_name or 'there'}", "",
-             "Today's classes:"]
+    focus = get_focus_now(Ctx(db=db, student=student, now=now))
+    lines = [f"GOOD MORNING {BRIEF_EMOJI} {student.full_name or 'there'} — here's your winning day", "",
+             "🗓️ Today's classes:"]
     if plan["today"]:
         for c in plan["today"]:
             lines.append(f"- {c['start']} {c['subject']} (Room {c['room'] or '—'})")
     else:
-        lines.append("- No classes scheduled.")
+        lines.append("- No classes scheduled. Perfect revision day.")
     lines.append("")
     if plan["deadlines"]:
-        lines.append("Upcoming:")
+        lines.append("⏰ Deadlines (ranked by urgency):")
         for d in plan["deadlines"][:4]:
-            lines.append(f"- {d['title']} (due {d['due']})")
+            _, label = urgency_score(d, now)
+            lines.append(f"- {d['title']} — due {d['due']} [{label} {_countdown(d['due'], now)}]")
         lines.append("")
     if plan["important"]:
-        lines.append("Important:")
+        lines.append("🚨 Important:")
         for i in plan["important"][:3]:
-            lines.append(f"- {i['title']}")
+            lines.append(f"- {i['title']} [{i['priority']}]")
         lines.append("")
     if plan["deadlines"]:
-        lines.append("Priority:")
-        for n, d in enumerate(plan["deadlines"][:3], 1):
-            lines.append(f"{n}. {d['title']}")
+        lines.append("🎯 Do NOW:")
+        lines.append(f"- {focus['do_now']}")
     else:
-        lines.append("No urgent deadlines — good day to revise ahead.")
-    return "Your daily brief", "\n".join(lines)
+        lines.append("🎯 No urgent deadlines — revise ahead 30 min and stay unbeatable.")
+    lines.append("")
+    lines.append("Ask me anything in chat — I answer from your timetable, inbox & docs.")
+    return "Your daily brief 🌅", "\n".join(lines)
 
 
 def _recent_notification(db: Session, student_id: int, kind: str, since: datetime) -> bool:

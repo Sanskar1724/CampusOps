@@ -164,6 +164,12 @@ def extract_text(filename: str, mime: str, data: bytes) -> str:
     return text
 
 
+def ocr_pdf(data: bytes) -> str:
+    """Public wrapper: force vision-OCR re-read of a PDF (second chance when
+    the digital text layer exists but is too jumbled for row detection)."""
+    return _ocr_pdf_pages(data)
+
+
 def ocr_image(data: bytes) -> str:
     return _ocr_image_bytes(data)
 
