@@ -1,18 +1,3 @@
-.env
-__pycache__/
-*.pyc
-.venv/
-venv/
-node_modules/
-.next/
-dist/
-build/
-*.log
-.vscode/
-.idea/
-.pytest_cache/
-campusops.db
-*.db-journal
-frontend/.env.local
-frontend/.next/
-frontend/tsconfig.tsbuildinfo
+# Only this file is excluded: GitHub hard-rejects any single file over 100MB.
+# Everything else in the repo (including .env, .venv, node_modules) is tracked.
+frontend/node_modules/@next/swc-win32-x64-msvc/next-swc.win32-x64-msvc.node
