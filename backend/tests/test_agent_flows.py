@@ -293,3 +293,14 @@ def test_short_answers_are_targeted(db_session):
     web = handle_turn(db_session, student, "what is my next class?",
                       channel="web", now=NOW)
     assert "DBMS" in web  # web keeps the fuller answer path
+
+
+def test_web_short_answers_not_dumps(db_session):
+    student = make_student(db_session)
+    seed_timetable(db_session, student)
+    web = lambda text: handle_turn(db_session, student, text, channel="web", now=NOW)
+    assert web("hello").startswith("Hi Test!")
+    nxt = web("what is my next class?")
+    assert "DBMS" in nxt and "Deadlines:" not in nxt and "Exams:" not in nxt
+    assert "No exams scheduled" in web("any exams coming?")
+    assert "APP GUIDE" in web("what should I focus on today?")  # full path keeps guide

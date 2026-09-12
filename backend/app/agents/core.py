@@ -265,10 +265,9 @@ def handle_turn(db: Session, student: models.Student, text: str,
     if visibility_reply is not None:
         return visibility_reply
 
-    if channel != "web":
-        short = _handle_chat_short(db, student, text, c, low, now)
-        if short is not None:
-            return short
+    short = _handle_chat_short(db, student, text, c, low, now)
+    if short is not None:
+        return short
 
     if wants["plan"] or not any(wants.values()):
         plan = tools.generate_daily_plan(c)
