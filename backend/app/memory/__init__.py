@@ -1,4 +1,4 @@
-"""Layered memory access. Structured tables are authoritative; chunks give
+﻿"""Layered memory access. Structured tables are authoritative; chunks give
 semantic recall. Everything is student-scoped at the query level."""
 
 from __future__ import annotations
@@ -66,7 +66,7 @@ def semantic_search(db: Session, student_id: int, query: str, top_k: int = 5):
     q = embeddings.embed(query)
     scored = []
     for chunk in chunks:
-        if garbage_score(chunk.text) > 0.7:
+        if garbage_score(chunk.text) > 0.5:
             continue  # glyph salad never answers anything
         vec_score = embeddings.cosine(q, embeddings.loads(chunk.embedding_json))
         # Hybrid: embedding similarity + keyword recall. Either signal alone

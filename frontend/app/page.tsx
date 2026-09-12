@@ -6,9 +6,6 @@ export default function Landing() {
       <header className="max-w-6xl mx-auto flex items-center justify-between p-6">
         <div className="text-xl font-bold text-indigo-700">🎓 CampusOps</div>
         <div className="flex items-center gap-3">
-          <span className="hidden sm:inline-block text-xs font-semibold bg-emerald-100 text-emerald-700 rounded-full px-3 py-1">
-            ● LIVE DEMO READY
-          </span>
           <Link href="/login" className="btn-ghost">Sign in</Link>
           <Link href="/register" className="btn">Get started</Link>
         </div>
@@ -27,11 +24,11 @@ export default function Landing() {
             with a morning brief, urgent alerts, and answers. One brain, everywhere you are.
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <Link href="/login" className="btn text-base px-6 py-3">⚡ Try live demo — 1 click</Link>
+            <Link href="/login" className="btn text-base px-6 py-3">Get started — free</Link>
             <Link href="/chat" className="btn-ghost text-base px-6 py-3">💬 Talk to the agent</Link>
           </div>
           <p className="mt-3 text-xs text-slate-500">
-            Demo login: <span className="font-mono font-semibold">demo.student@example.com / demo1234</span> · no setup needed
+            Exploring? Sign in with the sample account <span className="font-mono font-semibold">demo.student@example.com / demo1234</span>
           </p>
         </div>
 
@@ -66,9 +63,9 @@ export default function Landing() {
         </div>
 
         <div className="card mb-6 border-indigo-200 bg-gradient-to-r from-indigo-50 to-violet-50">
-          <div className="font-semibold mb-3">⚡ 60-second demo script (judges love this)</div>
+          <div className="font-semibold mb-3">⚡ See it in action in 60 seconds</div>
           <div className="grid md:grid-cols-3 gap-3 text-sm">
-            <div className="bg-white rounded-lg p-3 border"><span className="font-bold">1.</span> Sign in with demo account → dashboard shows <em>Do-NOW + brief + urgency badges</em>.</div>
+            <div className="bg-white rounded-lg p-3 border"><span className="font-bold">1.</span> Sign in with the sample account → dashboard shows <em>Do-NOW + brief + urgency badges</em>.</div>
             <div className="bg-white rounded-lg p-3 border"><span className="font-bold">2.</span> Chat: <span className="font-mono text-indigo-700">“Did my timetable change?”</span> → room 301→405 with email source.</div>
             <div className="bg-white rounded-lg p-3 border"><span className="font-bold">3.</span> Chat: <span className="font-mono text-indigo-700">“What should I focus on today?”</span> → ranked plan + deadlines.</div>
           </div>
@@ -79,13 +76,13 @@ export default function Landing() {
           <div className="text-sm text-slate-600">
             <span className="font-semibold text-slate-900">Try it live right now: </span>
             message <span className="font-mono font-semibold">@Sankiyy_bot</span> on Telegram with{" "}
-            <span className="font-mono">Hello CampusOps</span>, or press <span className="font-semibold">Try live demo</span> above.
-            <span className="block mt-1 text-xs text-slate-500">FastAPI + Next.js · SQLite → Postgres+pgvector · offline-safe LLM fallback · 22 tests green</span>
+            <span className="font-mono">Hello CampusOps</span>, or press <span className="font-semibold">Get started</span> above.
+            <span className="block mt-1 text-xs text-slate-500">FastAPI + Next.js · SQLite → Postgres+pgvector · offline-safe LLM fallback</span>
           </div>
         </div>
       </main>
       <footer className="border-t border-slate-200 py-6 text-center text-xs text-slate-500">
-        CampusOps — your personal academic agent · built for students, demo-ready in 60 seconds
+        CampusOps — your personal academic agent · built for students
       </footer>
     </div>
   );

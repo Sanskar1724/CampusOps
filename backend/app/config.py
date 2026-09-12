@@ -8,6 +8,7 @@ import os
 CASPIAN_API_KEY = os.environ.get("CASPIAN_API_KEY", "")
 CASPIAN_BASE_URL = os.environ.get("CASPIAN_BASE_URL", "https://api.trycaspianai.com")
 CAMPUSOPS_MAILBOX = os.environ.get("CAMPUSOPS_MAILBOX", "")
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 CASPIAN_ALLOWED_SENDERS = {
     s.strip()
     for s in os.environ.get("CASPIAN_ALLOWED_SENDERS", "").split(",")

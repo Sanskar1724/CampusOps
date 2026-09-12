@@ -23,6 +23,27 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
+    ensure_columns()
+
+
+def ensure_columns() -> None:
+    """Lightweight migration for databases created before a column existed.
+    `create_all` never adds columns to existing tables, so new fields get an
+    explicit ALTER TABLE here (SQLite + PostgreSQL)."""
+    from sqlalchemy import inspect, text as sql_text
+    wanted = {
+        "students": [("telegram_chat_id", "VARCHAR(64) NOT NULL DEFAULT ''")],
+        "notifications": [("error", "VARCHAR(500) NOT NULL DEFAULT ''")],
+    }
+    with engine.begin() as conn:
+        existing_tables = set(inspect(conn).get_table_names())
+        for table, columns in wanted.items():
+            if table not in existing_tables:
+                continue
+            present = {c["name"] for c in inspect(conn).get_columns(table)}
+            for name, ddl in columns:
+                if name not in present:
+                    conn.execute(sql_text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
 
 
 def get_db():

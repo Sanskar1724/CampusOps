@@ -39,6 +39,25 @@ def _allowed(sender: str) -> bool:
     return not config.CASPIAN_ALLOWED_SENDERS or sender in config.CASPIAN_ALLOWED_SENDERS
 
 
+def _telegram_chat_id(msg: Message) -> str:
+    """Find the Telegram chat id in the raw payload (shape varies by path:
+    poll vs webhook, direct vs nested `message`). Stored so proactive
+    notifications can go out over the Bot API when the gateway is blocked."""
+    raw = getattr(msg, "raw", None) or {}
+    if not isinstance(raw, dict):
+        return ""
+    candidates = [
+        raw.get("chat_id"),
+        (raw.get("chat") or {}).get("id") if isinstance(raw.get("chat"), dict) else None,
+        ((raw.get("message") or {}).get("chat") or {}).get("id")
+        if isinstance(raw.get("message"), dict) else None,
+    ]
+    for value in candidates:
+        if value:
+            return str(value)
+    return ""
+
+
 def register(cx: Caspian) -> Caspian:
     """Attach the single inbound-message rule. No channel filter on purpose:
     the same code answers wherever the student reaches us."""
@@ -51,6 +70,9 @@ def register(cx: Caspian) -> Caspian:
         try:
             student = get_or_create_student_for_sender(db, msg.sender or "unknown")
             student.caspian_thread_id = str(msg.thread_id)
+            chat_id = _telegram_chat_id(msg)
+            if chat_id:
+                student.telegram_chat_id = chat_id
             db.commit()
             channel = (msg.metadata or {}).get("channel", "caspian")
             conv = get_or_create_conversation(

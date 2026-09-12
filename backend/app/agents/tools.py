@@ -164,7 +164,7 @@ def generate_daily_plan(c: Ctx) -> dict:
 
 
 def urgency_score(deadline: dict, now: datetime) -> tuple[int, str]:
-    """Hackathon-winning ranker: overdue > due <24h > due <48h > high priority > rest."""
+    """Urgency ranker: overdue > due <24h > due <48h > high priority > rest."""
     due_raw = deadline.get("due")
     try:
         due = datetime.fromisoformat(str(due_raw)) if due_raw else None

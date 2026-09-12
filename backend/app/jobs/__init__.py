@@ -39,7 +39,7 @@ def build_daily_brief(db: Session, student: models.Student, now: datetime) -> tu
     from backend.app.agents.tools import Ctx, generate_daily_plan, get_focus_now, urgency_score
     plan = generate_daily_plan(Ctx(db=db, student=student, now=now))
     focus = get_focus_now(Ctx(db=db, student=student, now=now))
-    lines = [f"GOOD MORNING {BRIEF_EMOJI} {student.full_name or 'there'} — here's your winning day", "",
+    lines = [f"GOOD MORNING {BRIEF_EMOJI} {student.full_name or 'there'} — here's your day", "",
              "🗓️ Today's classes:"]
     if plan["today"]:
         for c in plan["today"]:
@@ -62,7 +62,7 @@ def build_daily_brief(db: Session, student: models.Student, now: datetime) -> tu
         lines.append("🎯 Do NOW:")
         lines.append(f"- {focus['do_now']}")
     else:
-        lines.append("🎯 No urgent deadlines — revise ahead 30 min and stay unbeatable.")
+        lines.append("🎯 No urgent deadlines — a good day to revise ahead 30 min.")
     lines.append("")
     lines.append("Ask me anything in chat — I answer from your timetable, inbox & docs.")
     return "Your daily brief 🌅", "\n".join(lines)

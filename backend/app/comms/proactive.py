@@ -1,10 +1,11 @@
-"""Proactive delivery through the hosted gateway.
+"""Proactive delivery: hosted gateway first, Telegram Bot API as fallback.
 
-Uses the same endpoint the SDK itself maps `Post` to
-(`POST /v1/conversations/{id}/messages`), with the conversation id taken from
-the stored hosted thread id (`channel:conversation-id`). Outcomes are recorded
-on the `notifications` row — queued when unconfigured, sent/failed otherwise.
-"""
+The gateway needs clean TLS to api.trycaspianai.com, which some networks
+block. Telegram's Bot API usually stays reachable, so once a student has
+messaged the bot (their chat id is captured in `handlers`), notifications
+can still go out that way. Outcomes are recorded on the `notifications`
+row — queued when nothing is configured, sent/failed otherwise. Failures
+store a short `error`, never rewriting the message body."""
 
 from __future__ import annotations
 
@@ -30,25 +31,61 @@ def queue_notification(db: Session, student_id: int, kind: str, title: str, body
     return note
 
 
+def _send_via_gateway(thread_id: str, text: str) -> None:
+    resp = httpx.post(
+        f"{config.CASPIAN_BASE_URL}/v1/conversations/{conversation_id(thread_id)}/messages",
+        headers={"Authorization": f"Bearer {config.CASPIAN_API_KEY}"},
+        json={"text": text},
+        timeout=30)
+    resp.raise_for_status()
+
+
+def _send_via_telegram(chat_id: str, text: str) -> None:
+    token = config.TELEGRAM_BOT_TOKEN
+    if not token:
+        raise ValueError("no Telegram bot token configured")
+    resp = httpx.post(f"https://api.telegram.org/bot{token}/sendMessage",
+                      json={"chat_id": chat_id, "text": text[:4000]}, timeout=30)
+    resp.raise_for_status()
+    if not resp.json().get("ok"):
+        raise ValueError(f"Telegram refused the message: {resp.text[:160]}")
+
+
 def deliver_queued(db: Session, note: models.Notification) -> models.Notification:
     """Attempt one delivery. Returns the updated row (sent/failed/queued)."""
-    thread_id = note.thread_id or (db.get(models.Student, note.student_id).caspian_thread_id or "")
-    if not config.CASPIAN_API_KEY or not thread_id:
+    student = db.get(models.Student, note.student_id)
+    thread_id = note.thread_id or ((student.caspian_thread_id or "") if student else "")
+    text = f"{note.title}\n\n{note.body}"
+    errors: list[str] = []
+    if config.CASPIAN_API_KEY and thread_id:
+        try:
+            _send_via_gateway(thread_id, text)
+            note.status = "sent"
+            note.sent_at = utcnow()
+            note.error = ""
+            db.commit()
+            db.refresh(note)
+            return note
+        except Exception as exc:
+            errors.append(f"gateway: {exc}"[:220])
+    chat_id = (student.telegram_chat_id or "") if student else ""
+    if chat_id:
+        try:
+            _send_via_telegram(chat_id, text)
+            note.status = "sent"
+            note.sent_at = utcnow()
+            note.error = ""
+            db.commit()
+            db.refresh(note)
+            return note
+        except Exception as exc:
+            errors.append(f"telegram: {exc}"[:220])
+    if not errors:
         note.status = "queued"
-        db.commit()
-        return note
-    try:
-        resp = httpx.post(
-            f"{config.CASPIAN_BASE_URL}/v1/conversations/{conversation_id(thread_id)}/messages",
-            headers={"Authorization": f"Bearer {config.CASPIAN_API_KEY}"},
-            json={"text": f"{note.title}\n\n{note.body}"},
-            timeout=30)
-        resp.raise_for_status()
-        note.status = "sent"
-        note.sent_at = utcnow()
-    except Exception as exc:
+        note.error = ""
+    else:
         note.status = "failed"
-        note.body = f"{note.body}\n[delivery error: {exc}]"[:4000]
+        note.error = " | ".join(errors)[:480]
     db.commit()
     db.refresh(note)
     return note

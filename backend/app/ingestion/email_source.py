@@ -159,6 +159,16 @@ def gmail_exchange_code(client_id: str, client_secret: str, code: str, redirect_
     return resp.json()
 
 
+def gmail_refresh_access_token(client_id: str, client_secret: str, refresh_token: str) -> dict:
+    """Google access tokens expire after ~1h. Swap the stored refresh token
+    for a fresh access token (raises on revoked/invalid grants)."""
+    resp = httpx.post("https://oauth2.googleapis.com/token", data={
+        "client_id": client_id, "client_secret": client_secret,
+        "refresh_token": refresh_token, "grant_type": "refresh_token"}, timeout=30)
+    resp.raise_for_status()
+    return resp.json()
+
+
 def google_userinfo(access_token: str) -> dict:
     resp = httpx.get("https://openidconnect.googleapis.com/v1/userinfo",
                      headers={"Authorization": f"Bearer {access_token}"}, timeout=30)

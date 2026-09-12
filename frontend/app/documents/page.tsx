@@ -101,6 +101,30 @@ export default function Documents() {
                   </button>
                 </div>
                 <div><Facts facts={d.facts} /></div>
+                {d.warning && (
+                  <div className="text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-lg p-2">
+                    ⚠️ {d.warning}
+                    <label className="block mt-1.5 text-indigo-700 cursor-pointer hover:underline">
+                      🔁 Re-scan with OCR (re-upload the file)
+                      <input
+                        type="file" className="hidden"
+                        accept="application/pdf,image/png,image/jpeg"
+                        onChange={async (e) => {
+                          const f = e.target.files?.[0];
+                          if (!f) return;
+                          setMsg("Re-scanning with vision OCR…");
+                          try {
+                            const r = await upload(`/api/documents/${d.id}/rescan`, f);
+                            setMsg(`✅ Re-scan done via ${r.extraction}.`);
+                            refresh();
+                          } catch (err: any) {
+                            setMsg(err.message || "Re-scan failed.");
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
+                )}
               </div>
             ))}
             {docs.length === 0 && <div className="text-sm text-slate-500">No documents yet — upload your academic calendar to enable search.</div>}

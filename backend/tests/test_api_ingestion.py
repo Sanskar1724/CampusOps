@@ -2,6 +2,7 @@
 
 from fastapi.testclient import TestClient
 
+from backend.app import models
 from backend.app.ingestion import pdf_source
 from backend.app.main import app
 
@@ -254,3 +255,131 @@ def test_hybrid_search_skips_garbage(db_session):
     hits = semantic_search(db_session, me["id"], "DBMS exam")
     assert hits and all("Ess" not in h["text"][:20] for h in hits)
     assert hits[0]["score"] > 0.3  # keyword recall lifts the real match
+
+
+def test_gmail_refresh_on_401(db_session, monkeypatch):
+    import backend.app.api.resources as res_mod
+    headers = register("refr@college.edu", "REF1")
+    me = client.get("/api/auth/me", headers=headers).json()
+    from backend.app import models, security
+    student = db_session.get(models.Student, me["id"])
+    db_session.add(models.Integration(
+        student_id=student.id, provider="gmail", status="connected",
+        account_ref="refr@college.edu",
+        meta_json='{"access_token": "stale", "refresh_token": "ref123"}'))
+    db_session.commit()
+
+    calls = {"fetch": 0}
+
+    class FakeGmail:
+        def __init__(self, token):
+            self.token = token
+
+        def fetch(self, db, student_id, max_results=20, days=7):
+            calls["fetch"] += 1
+            if self.token == "stale":
+                raise Exception("401 Unauthorized for url")
+            from backend.app.ingestion import RawItem
+            return [RawItem(external_id="r:1", title="DBMS moved to Room 405",
+                            sender="dept@college.edu",
+                            body="DBMS lecture moved from Room 301 to Room 405.")]
+
+    monkeypatch.setattr(res_mod.email_source, "GmailSource", FakeGmail)
+    monkeypatch.setattr(res_mod.email_source, "gmail_refresh_access_token",
+                        lambda *a: {"access_token": "fresh"})
+    resp = client.post("/api/email/sync", headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["processed"] == 1 and calls["fetch"] == 2
+    db_session.refresh(student)
+    integ = db_session.query(models.Integration).filter_by(
+        student_id=student.id, provider="gmail").one()
+    assert "fresh" in integ.meta_json
+
+
+def test_proactive_telegram_fallback(db_session, monkeypatch):
+    import backend.app.comms.proactive as pro_mod
+    from backend.app import models
+    headers = register("tgfb@college.edu", "TGFB1")
+    me = client.get("/api/auth/me", headers=headers).json()
+    student = db_session.get(models.Student, me["id"])
+    student.telegram_chat_id = "777"
+    db_session.commit()
+
+    def boom_gateway(thread_id, text):
+        raise Exception("SSL: CERTIFICATE_VERIFY_FAILED")
+
+    sent = {}
+
+    def fake_telegram(chat_id, text):
+        sent["chat_id"] = chat_id
+        assert "777" == chat_id
+
+    monkeypatch.setattr(pro_mod, "_send_via_gateway", boom_gateway)
+    monkeypatch.setattr(pro_mod, "_send_via_telegram", fake_telegram)
+    note = pro_mod.notify_student(db_session, student.id, "brief", "Hi", "body")
+    assert note.status == "sent" and sent["chat_id"] == "777"
+    assert note.error == "" and note.sent_at is not None
+
+
+def test_failed_delivery_keeps_body_intact(db_session, monkeypatch):
+    import backend.app.comms.proactive as pro_mod
+    headers = register("tgfail@college.edu", "TGF1")
+    me = client.get("/api/auth/me", headers=headers).json()
+    student = db_session.get(models.Student, me["id"])
+    student.caspian_thread_id = "email:dead-thread"
+    db_session.commit()
+    monkeypatch.setattr(pro_mod, "_send_via_gateway",
+                        lambda t, x: (_ for _ in ()).throw(Exception("down")))
+    monkeypatch.setattr(pro_mod.config, "CASPIAN_API_KEY", "k")
+    note = pro_mod.notify_student(db_session, student.id, "brief", "Hi", "body")
+    assert note.status == "failed"
+    assert note.body == "body" and "down" in note.error
+
+
+def test_telegram_chat_id_captured(db_session):
+    from backend.app.comms.handlers import _telegram_chat_id
+    from caspian import Message
+    assert _telegram_chat_id(Message(
+        thread_id="t", text="hi", chat_kind="dm",  # type: ignore[arg-type]
+        raw={"message": {"chat": {"id": 12345}}})) == "12345"
+    assert _telegram_chat_id(Message(
+        thread_id="t", text="hi", chat_kind="dm",  # type: ignore[arg-type]
+        raw={"chat": {"id": 99}})) == "99"
+    assert _telegram_chat_id(Message(
+        thread_id="t", text="hi", chat_kind="dm")) == ""  # type: ignore[arg-type]
+
+
+def test_timetable_scope_mine(db_session):
+    headers = register("scope@college.edu", "SCP1")
+    for row in ({"day": 0, "subject": "DBMS", "start_time": "09:00",
+                 "end_time": "10:00", "room": "301", "division": "A", "batch": "B1"},
+                {"day": 0, "subject": "Physics", "start_time": "09:00",
+                 "end_time": "10:00", "room": "302", "division": "A", "batch": "B2"}):
+        assert client.post("/api/timetable/", json=row, headers=headers).status_code == 200
+    all_rows = client.get("/api/timetable/", headers=headers).json()
+    mine = client.get("/api/timetable/", params={"scope": "mine"}, headers=headers).json()
+    assert len(all_rows) == 2 and len(mine) == 1 and mine[0]["subject"] == "DBMS"
+
+
+def test_rescan_rebuilds_chunks(db_session, monkeypatch):
+    import backend.app.api.resources as res_mod
+    headers = register("resc@college.edu", "RSC1")
+    me = client.get("/api/auth/me", headers=headers).json()
+    from backend.app import models
+    doc = models.Document(student_id=me["id"], filename="old.pdf",
+                          mime="application/pdf", size_bytes=10, facts_json="{}")
+    db_session.add(doc)
+    db_session.commit()
+    db_session.refresh(doc)
+    from backend.app.memory import add_chunk
+    add_chunk(db_session, doc, 0, "; n ; $ * Ess " * 40)
+    monkeypatch.setattr(res_mod.pdf_source, "extract_any_text",
+                        lambda fn, mime, data: ("OS exam on 15/09 in Room 402", "vision-ocr"))
+    resp = client.post(f"/api/documents/{doc.id}/rescan",
+                       files={"file": ("old.pdf", b"%PDF-fake", "application/pdf")},
+                       headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["extraction"] == "vision-ocr"
+    texts = [c.text for c in
+             db_session.query(models.DocumentChunk).filter_by(document_id=doc.id)]
+    assert texts and all("Ess" not in t for t in texts)

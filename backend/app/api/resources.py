@@ -239,25 +239,66 @@ def important(db: Session = Depends(get_db), student: models.Student = Depends(M
     return out
 
 
-def _gmail_access_token(db: Session, student: models.Student) -> str:
+def _gmail_tokens(db: Session, student: models.Student) -> tuple[models.Integration, str, str]:
     integ = db.scalar(select(models.Integration).where(
         models.Integration.student_id == student.id,
         models.Integration.provider == "gmail"))
     if not integ or integ.status != "connected":
         raise HTTPException(409, "Gmail not connected — see /api/integrations/gmail/auth-url")
-    return safe_json_loads(integ.meta_json, {}).get("access_token", "")
+    meta = safe_json_loads(integ.meta_json, {})
+    return integ, meta.get("access_token", ""), meta.get("refresh_token", "")
+
+
+def _gmail_access_token(db: Session, student: models.Student) -> str:
+    _, token, _ = _gmail_tokens(db, student)
+    return token
+
+
+def _refresh_gmail_token(db: Session, student: models.Student,
+                         integ: models.Integration, refresh_token: str) -> str:
+    """Swap an expired access token using the stored refresh token."""
+    if not refresh_token:
+        integ.status = "expired"
+        db.commit()
+        raise HTTPException(
+            409, "Gmail session expired and no refresh token was saved. "
+                 "Disconnect and reconnect Gmail in Settings.")
+    try:
+        tokens = email_source.gmail_refresh_access_token(
+            os.environ.get("GMAIL_CLIENT_ID", ""),
+            os.environ.get("GMAIL_CLIENT_SECRET", ""), refresh_token)
+    except Exception:
+        integ.status = "expired"
+        db.commit()
+        raise HTTPException(
+            409, "Gmail revoked access. Disconnect and reconnect Gmail in Settings.")
+    meta = safe_json_loads(integ.meta_json, {})
+    meta["access_token"] = tokens.get("access_token", "")
+    if tokens.get("refresh_token"):
+        meta["refresh_token"] = tokens["refresh_token"]
+    integ.meta_json = json.dumps(meta)
+    integ.updated_at = utcnow()
+    db.commit()
+    return meta["access_token"]
 
 
 @email_router.post("/sync")
 def sync_email(days: int = 7, limit: int = 20, db: Session = Depends(get_db),
                student: models.Student = Depends(Me)):
     """Pull college mail. Tune the window: /sync?days=30&limit=50 for a deep catch-up."""
-    token = _gmail_access_token(db, student)
+    integ, token, refresh_token = _gmail_tokens(db, student)
     try:
         items = email_source.GmailSource(token).fetch(db, student.id,
                                                       max_results=limit, days=days)
-    except Exception as exc:
-        raise HTTPException(502, f"Gmail fetch failed: {exc}")
+    except Exception as first_exc:
+        if "401" not in str(first_exc) and "unauthorized" not in str(first_exc).lower():
+            raise HTTPException(502, f"Gmail fetch failed: {first_exc}")
+        token = _refresh_gmail_token(db, student, integ, refresh_token)
+        try:
+            items = email_source.GmailSource(token).fetch(db, student.id,
+                                                          max_results=limit, days=days)
+        except Exception as exc:
+            raise HTTPException(502, f"Gmail fetch failed after refresh: {exc}")
     processed = [email_source.ingest_raw_email(db, student.id, item).id for item in items]
     from backend.app.services import detect_schedule_change  # noqa: E402
     for ext_id in processed:
@@ -277,8 +318,17 @@ def list_docs(db: Session = Depends(get_db), student: models.Student = Depends(M
     rows = list(db.scalars(select(models.Document).where(
         models.Document.student_id == student.id)
         .order_by(models.Document.created_at.desc())))
-    return [{"id": d.id, "filename": d.filename, "size": d.size_bytes,
-             "facts": safe_json_loads(d.facts_json, {})} for d in rows]
+    out = []
+    for d in rows:
+        facts = safe_json_loads(d.facts_json, {})
+        method = facts.get("extraction", "text-layer")
+        warning = None
+        if str(method).startswith("ocr-failed"):
+            warning = ("Scan unreadable and vision OCR unavailable — press Re-scan "
+                       "to retry, or upload the text version from your portal.")
+        out.append({"id": d.id, "filename": d.filename, "size": d.size_bytes,
+                    "facts": facts, "extraction": method, "warning": warning})
+    return out
 
 
 @docs_router.post("/upload")
@@ -313,6 +363,46 @@ def delete_doc(doc_id: int, db: Session = Depends(get_db),
     db.delete(doc)
     db.commit()
     return {"deleted": doc_id}
+
+
+@docs_router.post("/{doc_id}/rescan")
+async def rescan_doc(doc_id: int, file: UploadFile = File(...),
+                     db: Session = Depends(get_db),
+                     student: models.Student = Depends(Me)):
+    """Re-read a document (e.g. a scanned PDF whose first pass stored glyph
+    salad) and rebuild its chunks + facts in place. Upload the same file —
+    the new pass retries with vision OCR, so a previously failed scan can
+    succeed once quota/connectivity allows."""
+    from backend.app.ingestion import pdf_source as _pdf  # noqa: E402
+    from backend.app.ingestion.email_source import student_subjects  # noqa: E402
+    from backend.app.ingestion.extract import enrich_with_llm, scan_facts  # noqa: E402
+    from backend.app.memory import add_chunk  # noqa: E402
+    doc = db.get(models.Document, doc_id)
+    if not doc or doc.student_id != student.id:
+        raise HTTPException(404, "Not found")
+    data = await file.read()
+    mime = file.content_type or "application/pdf"
+    try:
+        text, method = _pdf.extract_any_text(file.filename or doc.filename, mime, data)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    if not text.strip():
+        raise HTTPException(400, "No readable text found, even with OCR retry.")
+    db.query(models.DocumentChunk).filter(
+        models.DocumentChunk.document_id == doc.id).delete()
+    for idx, piece in enumerate(_pdf.chunk_text(text)):
+        from backend.app.ingestion.extract import garbage_score  # noqa: E402
+        if garbage_score(piece) > 0.5:
+            continue
+        add_chunk(db, doc, idx, piece)
+    subjects = student_subjects(db, student.id)
+    facts = enrich_with_llm(text[:8000], scan_facts(text[:12000], subjects))
+    facts["extraction"] = method
+    doc.facts_json = json.dumps(facts)
+    doc.size_bytes = len(data)
+    db.commit()
+    db.refresh(doc)
+    return {"id": doc.id, "extraction": method, "facts": facts}
 
 
 # ---------- deadlines / exams / tasks / reminders ----------

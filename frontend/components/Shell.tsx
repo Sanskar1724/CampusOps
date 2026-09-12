@@ -21,11 +21,10 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen flex">
       <aside className="w-60 shrink-0 border-r border-slate-200 bg-white p-4 hidden md:block">
-        <Link href="/dashboard" className="block px-3 py-2 mb-1">
+        <Link href="/dashboard" className="block px-3 py-2 mb-4">
           <span className="text-lg font-bold text-indigo-700">🎓 CampusOps</span>
           <span className="block text-xs text-slate-500">Personal Academic Agent</span>
         </Link>
-        <div className="mx-3 mb-4"><span className="badge badge-live">● LIVE DEMO</span></div>
         <nav className="space-y-1">
           {LINKS.map(([label, href]) => (
             <Link
