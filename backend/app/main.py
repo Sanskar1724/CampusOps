@@ -5,6 +5,8 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
+import os
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -24,7 +26,11 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="CampusOps", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+    # Local dev defaults + FRONTEND_URLS (comma-separated) for deployments,
+    # e.g. FRONTEND_URLS=https://campusops-web.onrender.com
+    allow_origins=["http://localhost:3000", "http://localhost:3001"] + [
+        u.strip() for u in os.environ.get("FRONTEND_URLS", "").split(",") if u.strip()
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -1,0 +1,64 @@
+# Render blueprint: one-click deploy of the whole stack.
+# In Render: New → Blueprint → connect this repo. Then fill the secrets
+# (APP_SECRET_KEY, OPENAI_API_KEY, CASPIAN_API_KEY, TELEGRAM_BOT_TOKEN,
+#  GMAIL_CLIENT_ID/SECRET) in the dashboard — never in git.
+
+databases:
+  - name: campusops-db
+    databaseName: campusops
+    user: campusops
+    # Render Postgres ships the pgvector extension; enable once via SQL:
+    #   CREATE EXTENSION IF NOT EXISTS vector;
+
+services:
+  - type: web
+    name: campusops-api
+    runtime: python
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: sh -c "python -m scripts.init_db --seed && python -m uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase: { name: campusops-db, property: connectionString }
+      - key: APP_SECRET_KEY
+        generateValue: true
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_BASE_URL
+        value: https://openrouter.ai/api/v1
+      - key: MODEL
+        value: nex-agi/nex-n2.5-mini:free
+      - key: CASPIAN_API_KEY
+        sync: false
+      - key: CASPIAN_BASE_URL
+        value: https://api.trycaspianai.com
+      - key: CAMPUSOPS_MAILBOX
+        value: campusops
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: GMAIL_CLIENT_ID
+        sync: false
+      - key: GMAIL_CLIENT_SECRET
+        sync: false
+      - key: FRONTEND_URLS
+        sync: false  # set to https://<your-app>.vercel.app after Vercel deploy
+
+  - type: worker
+    name: campusops-worker
+    runtime: python
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: python -m backend.app.jobs.worker
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase: { name: campusops-db, property: connectionString }
+      - key: APP_SECRET_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_BASE_URL
+        value: https://openrouter.ai/api/v1
+      - key: MODEL
+        value: nex-agi/nex-n2.5-mini:free
+      - key: CASPIAN_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false

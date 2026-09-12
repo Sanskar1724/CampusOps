@@ -1,3 +1,31 @@
-# Only this file is excluded: GitHub hard-rejects any single file over 100MB.
-# Everything else in the repo (including .env, .venv, node_modules) is tracked.
-frontend/node_modules/@next/swc-win32-x64-msvc/next-swc.win32-x64-msvc.node
+# Secrets — NEVER commit these (use .env.example as template)
+.env
+.env.local
+frontend/.env.local
+
+# Local databases (contain real user data)
+*.db
+*.db-journal
+*.sqlite
+*.sqlite-journal
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# Frontend build output & deps (rebuilt via npm install / npm run build)
+node_modules/
+.next/
+frontend/tsconfig.tsbuildinfo
+
+# General
+dist/
+build/
+*.log
+.vscode/
+.idea/
+.DS_Store
