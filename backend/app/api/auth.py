@@ -16,7 +16,7 @@ from backend.app.ingestion import email_source
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 PROFILE_FIELDS = ["full_name", "prn", "department", "division", "batch",
-                  "roll_number", "semester", "course", "college_email"]
+                  "roll_number", "semester", "college_email"]
 
 
 @router.post("/register", response_model=schemas.TokenOut)

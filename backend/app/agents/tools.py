@@ -21,6 +21,24 @@ class Ctx:
     db: Session
     student: models.Student
     now: datetime
+    hidden_subjects: list[str] | None = None
+    hidden_days: list[int] | None = None
+
+
+def make_ctx(db: Session, student: models.Student, now: datetime) -> Ctx:
+    """Ctx pre-loaded with the student's hidden timetable rules."""
+    from backend.app.api.deps import get_user_context
+    uctx = get_user_context(db, student)
+    return Ctx(db=db, student=student, now=now,
+               hidden_subjects=uctx.hidden_subjects, hidden_days=uctx.hidden_days)
+
+
+def _is_hidden(c: Ctx, subject: str, day: int) -> bool:
+    if (c.hidden_days or []) and day in (c.hidden_days or []):
+        return True
+    slow = (subject or "").strip().lower()
+    return any(slow == str(h).strip().lower()
+               for h in (c.hidden_subjects or []) if h)
 
 
 def _applies(entry: models.TimetableEntry, student: models.Student) -> bool:
@@ -37,7 +55,8 @@ def get_day_schedule(c: Ctx, day: int) -> list[dict]:
     rows = list(c.db.scalars(select(models.TimetableEntry).where(
         models.TimetableEntry.student_id == c.student.id,
         models.TimetableEntry.day == day).order_by(models.TimetableEntry.start_time)))
-    return _fmt([e for e in rows if _applies(e, c.student)])
+    return _fmt([e for e in rows
+                 if _applies(e, c.student) and not _is_hidden(c, e.subject, e.day)])
 
 
 def get_today_schedule(c: Ctx) -> list[dict]:

@@ -14,7 +14,7 @@ from sqlalchemy import select
 
 from backend.app import config, models
 from backend.app.agents.core import handle_turn
-from backend.app.comms.service import reply_text
+from backend.app.comms.service import expand_command, reply_with_actions
 from backend.app.db import SessionLocal
 from backend.app.memory import get_or_create_conversation, log_message
 
@@ -80,13 +80,41 @@ def register(cx: Caspian) -> Caspian:
                 sender=msg.sender, student_id=student.id)
             log_message(db, conv.id, "user", msg.text)
             try:
-                reply = handle_turn(db, student, msg.text, channel=str(channel))
+                reply = handle_turn(db, student, expand_command(msg.text),
+                                    channel=str(channel))
             except Exception:
                 traceback.print_exc()
                 reply = ("Something went wrong on my side. Your message is saved — "
                          "please try again in a moment.")
             log_message(db, conv.id, "agent", reply)
-            reply_text(thread, reply)
+            reply_with_actions(thread, reply)
+        finally:
+            db.close()
+
+    @cx.on_action({"overlap": "queue"})
+    def handle_action(thread: Thread, action, ctx: HandlerContext) -> None:
+        """Quick-action button taps (Telegram keyboards) route back into the
+        same agent as the equivalent question."""
+        from backend.app.comms.service import COMMAND_TEXT
+        data = str(getattr(action, "data", "") or "")
+        name = data.split(":", 1)[1] if data.startswith("cmd:") else ""
+        question = COMMAND_TEXT.get(name)
+        if not question:
+            return
+        db = SessionLocal()
+        try:
+            student = get_or_create_student_for_sender(
+                db, getattr(action, "sender", "") or "unknown")
+            student.caspian_thread_id = str(getattr(action, "thread_id", ""))
+            db.commit()
+            conv = get_or_create_conversation(
+                db, channel="caspian",
+                thread_id=str(getattr(action, "thread_id", "")),
+                student_id=student.id)
+            log_message(db, conv.id, "user", f"[{name}]")
+            reply = handle_turn(db, student, question, channel="caspian")
+            log_message(db, conv.id, "agent", reply)
+            reply_with_actions(thread, reply)
         finally:
             db.close()
 

@@ -75,6 +75,40 @@ def add_memory(payload: schemas.MemoryIn, db: Session = Depends(get_db),
     return {"id": mem.id}
 
 
+@student_router.get("/preferences")
+def get_preferences(db: Session = Depends(get_db),
+                    student: models.Student = Depends(Me)):
+    from backend.app.api.deps import get_prefs  # noqa: E402
+    return get_prefs(db, student.id)
+
+
+@student_router.put("/preferences")
+def put_preferences(payload: dict, db: Session = Depends(get_db),
+                    student: models.Student = Depends(Me)):
+    """Update notification + view preferences. Accepted keys: notify_brief,
+    notify_deadline, notify_reminder, notify_change (bool), notify_channel
+    (auto|gateway|telegram), quiet_start/quiet_end (hour 0-23 or null),
+    hidden_subjects (list), hidden_days (list of 0-6). Unknown keys ignored."""
+    from backend.app.api.deps import PREF_DEFAULTS, set_pref  # noqa: E402
+    updated = []
+    channel = payload.get("notify_channel")
+    if channel is not None and channel not in ("auto", "gateway", "telegram"):
+        raise HTTPException(400, "notify_channel must be auto, gateway, or telegram.")
+    for key in ("quiet_start", "quiet_end"):
+        if key in payload and payload[key] is not None:
+            try:
+                hour = int(payload[key])
+            except (ValueError, TypeError):
+                raise HTTPException(400, f"{key} must be an hour 0-23 or null.")
+            if not 0 <= hour <= 23:
+                raise HTTPException(400, f"{key} must be an hour 0-23 or null.")
+    for key in PREF_DEFAULTS:
+        if key in payload:
+            set_pref(db, student.id, key, payload[key])
+            updated.append(key)
+    return {"updated": updated}
+
+
 # ---------- timetable ----------
 
 tt_router = APIRouter(prefix="/api/timetable", tags=["timetable"])
@@ -500,9 +534,9 @@ def list_exams(db: Session = Depends(get_db), student: models.Student = Depends(
 @plan_router.get("/focus")
 def focus_now(db: Session = Depends(get_db), student: models.Student = Depends(Me)):
     """Killer endpoint: ranked 'do this NOW' — powers dashboard hero + demo."""
-    from backend.app.agents.tools import Ctx, get_focus_now
+    from backend.app.agents.tools import get_focus_now, make_ctx
     from backend.app.models import utcnow as _utcnow
-    return get_focus_now(Ctx(db=db, student=student, now=_utcnow()))
+    return get_focus_now(make_ctx(db=db, student=student, now=_utcnow()))
 
 
 # ---------- notifications ----------
@@ -516,7 +550,7 @@ def list_notifs(db: Session = Depends(get_db), student: models.Student = Depends
         models.Notification.student_id == student.id)
         .order_by(models.Notification.created_at.desc()).limit(50)))
     return [{"id": n.id, "kind": n.kind, "title": n.title, "body": n.body,
-             "status": n.status, "created_at": n.created_at} for n in rows]
+             "status": n.status, "error": n.error, "created_at": n.created_at} for n in rows]
 
 
 # ---------- chat (same Core Agent as Caspian) ----------

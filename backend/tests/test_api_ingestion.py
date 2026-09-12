@@ -194,6 +194,86 @@ def test_system_status_board(db_session):
     assert client.get("/api/system/status").status_code == 401  # auth required
 
 
+def test_preferences_api_validation(db_session):
+    headers = register("pref@college.edu", "PRF1")
+    prefs = client.get("/api/student/preferences", headers=headers).json()
+    assert prefs["notify_brief"] is True and prefs["hidden_subjects"] == []
+    bad = client.put("/api/student/preferences",
+                     json={"notify_channel": "pigeon"}, headers=headers)
+    assert bad.status_code == 400
+    bad2 = client.put("/api/student/preferences",
+                      json={"quiet_start": 99}, headers=headers)
+    assert bad2.status_code == 400
+    ok = client.put("/api/student/preferences",
+                    json={"notify_brief": False, "quiet_start": 22,
+                          "quiet_end": 7, "notify_channel": "telegram"},
+                    headers=headers).json()
+    assert ok["updated"] == ["notify_brief", "notify_channel", "quiet_start", "quiet_end"]
+    assert client.get("/api/student/preferences", headers=headers).json()["quiet_start"] == 22
+
+
+def test_brief_respects_prefs_and_quiet_hours(db_session):
+    from datetime import datetime, timezone
+    from backend.app.jobs import run_daily_brief
+    headers = register("quiet@college.edu", "QHT1")
+    me = client.get("/api/auth/me", headers=headers).json()
+    student = db_session.get(models.Student, me["id"])
+    run_daily_brief(db_session, datetime(2026, 9, 9, 8, 0, tzinfo=timezone.utc))
+    client.put("/api/student/preferences", json={"notify_brief": False}, headers=headers)
+    before = db_session.query(models.Notification).filter_by(
+        student_id=student.id, kind="brief").count()
+    run_daily_brief(db_session, datetime(2026, 9, 10, 8, 0, tzinfo=timezone.utc))
+    assert db_session.query(models.Notification).filter_by(
+        student_id=student.id, kind="brief").count() == before
+    client.put("/api/student/preferences",
+               json={"notify_brief": True, "quiet_start": 0, "quiet_end": 23},
+               headers=headers)
+    run_daily_brief(db_session, datetime(2026, 9, 10, 8, 0, tzinfo=timezone.utc))
+    assert db_session.query(models.Notification).filter_by(
+        student_id=student.id, kind="brief").count() == before  # quiet all day
+
+
+def test_delivery_suppressed_status(db_session):
+    import backend.app.comms.proactive as pro_mod
+    from backend.app.api.deps import set_pref
+    headers = register("supp@college.edu", "SUP1")
+    me = client.get("/api/auth/me", headers=headers).json()
+    student = db_session.get(models.Student, me["id"])
+    set_pref(db_session, student.id, "notify_brief", False)
+    note = pro_mod.queue_notification(db_session, student.id, "brief", "Hi", "body")
+    out = pro_mod.deliver_queued(db_session, note)
+    assert out.status == "suppressed"
+
+
+def test_telegram_commands_and_buttons(db_session):
+    from backend.app.comms.service import COMMAND_TEXT, expand_command, quick_buttons
+    assert expand_command("/today") == "What do I have today?"
+    assert expand_command("/next@Sankiyy_bot") == "What is my next class?"
+    assert expand_command("plain text") == "plain text"
+    assert expand_command("/unknowncmd") == "/unknowncmd"
+    buttons = quick_buttons()
+    assert len(buttons) == 5 and all(b.label and b.data.startswith("cmd:") for b in buttons)
+    assert set(COMMAND_TEXT) >= {"today", "tomorrow", "next", "deadlines", "brief", "focus", "help"}
+
+
+def test_on_action_rule_registered(db_session):
+    from caspian import Action
+    from caspian.core.commands import Host
+    from backend.app.comms.client import build_caspian_app
+    cx = build_caspian_app(mailbox="cmd-test", dispatch=False)
+    assert len(cx.app.rules) == 2  # message + action rules
+    interp = cx.interpret()
+    event = Action(thread_id="t1", data="cmd:today", sender="s")  # type: ignore[arg-type]
+    result = interp.run(cx.app, event, channel_name="email")
+    assert any(isinstance(cmd, Host) for cmd in result.commands)
+
+
+def test_help_endpoint(db_session):
+    headers = register("help@college.edu", "HLP1")
+    md = client.get("/api/system/help", headers=headers).json()["markdown"]
+    assert "Timetable" in md and "Telegram" in md
+
+
 def test_garbage_detector():
     from backend.app.ingestion.extract import garbage_score, is_garbage_text
     assert garbage_score("DBMS mid-semester exam Monday Room 405") < 0.3

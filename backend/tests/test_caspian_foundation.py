@@ -37,7 +37,7 @@ def test_fallback_brain_reply():
 
 def test_handler_runs_full_pipeline_on_real_thread(db_session):
     cx = build_caspian_app(mailbox=MAILBOX, dispatch=False)
-    assert len(cx.app.rules) == 1  # one handler, every channel
+    assert len(cx.app.rules) == 2  # message handler + action handler, every channel
 
     handler_id = next(iter(cx._handlers))  # noqa: SLF001 — test seam
     handler = cx._handlers[handler_id]  # noqa: SLF001
@@ -77,4 +77,4 @@ def test_telegram_self_host_builds_offline():
     cx = build_caspian_app(telegram_bot_token="dummy-token-for-build",
                            telegram_via="self-host", dispatch=False)
     assert cx.channels.added() == ["telegram"]
-    assert len(cx.app.rules) == 1
+    assert len(cx.app.rules) == 2  # message + action handlers

@@ -78,3 +78,10 @@ def status(db: Session = Depends(get_db), student: models.Student = Depends(Me))
         checks.append(_check("gmail", False, "Set GMAIL_CLIENT_ID/SECRET on the server."))
 
     return {"all_ok": all(c["ok"] for c in checks), "checks": checks}
+
+
+@router.get("/help")
+def help_guide(db: Session = Depends(get_db), student: models.Student = Depends(Me)):
+    """The user guide as markdown (single source: docs/USER_GUIDE.md)."""
+    from backend.app.user_guide import load_full_guide  # noqa: E402
+    return {"markdown": load_full_guide()}

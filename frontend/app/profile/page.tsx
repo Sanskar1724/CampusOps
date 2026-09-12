@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useEffect, useState } from "react";
 import Shell from "@/components/Shell";
 import { api } from "@/lib/api";
@@ -17,7 +17,18 @@ export default function Profile() {
 
   return (
     <Shell>
-      <h1 className="text-2xl font-bold mb-4">Student Profile</h1>
+      <h1 className="text-2xl font-bold mb-4">👤 Student Profile</h1>
+      {me && (
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 text-white text-xl font-bold flex items-center justify-center">
+            {(me.full_name || me.college_email || "?").trim().charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <div className="font-semibold">{me.full_name || "Your profile"}</div>
+            <div className="text-xs text-slate-500">{me.college_email} · PRN {me.prn}</div>
+          </div>
+        </div>
+      )}
       {me && (
         <form
           className="card space-y-3 max-w-lg"

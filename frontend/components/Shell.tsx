@@ -13,6 +13,7 @@ const LINKS = [
   ["🔔 Notifications", "/notifications"],
   ["👤 Profile", "/profile"],
   ["⚙️ Settings", "/settings"],
+  ["❓ Help", "/help"],
 ];
 
 export default function Shell({ children }: { children: React.ReactNode }) {

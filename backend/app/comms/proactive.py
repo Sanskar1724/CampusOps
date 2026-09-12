@@ -52,12 +52,25 @@ def _send_via_telegram(chat_id: str, text: str) -> None:
 
 
 def deliver_queued(db: Session, note: models.Notification) -> models.Notification:
-    """Attempt one delivery. Returns the updated row (sent/failed/queued)."""
+    """Attempt one delivery. Returns the updated row.
+
+    Respects the student's notification prefs: a disabled kind is marked
+    `suppressed` (terminal, never retried); quiet hours keep it `queued`
+    for a later sweep; `notify_channel` picks gateway-only/telegram-only."""
+    from backend.app.api.deps import get_prefs, in_quiet_hours, kind_allowed
+    prefs = get_prefs(db, note.student_id)
+    if not kind_allowed(prefs, note.kind):
+        note.status = "suppressed"
+        note.error = ""
+        db.commit()
+        db.refresh(note)
+        return note
     student = db.get(models.Student, note.student_id)
     thread_id = note.thread_id or ((student.caspian_thread_id or "") if student else "")
     text = f"{note.title}\n\n{note.body}"
+    channel = str(prefs.get("notify_channel", "auto"))
     errors: list[str] = []
-    if config.CASPIAN_API_KEY and thread_id:
+    if channel in ("auto", "gateway") and config.CASPIAN_API_KEY and thread_id:
         try:
             _send_via_gateway(thread_id, text)
             note.status = "sent"
@@ -69,7 +82,7 @@ def deliver_queued(db: Session, note: models.Notification) -> models.Notificatio
         except Exception as exc:
             errors.append(f"gateway: {exc}"[:220])
     chat_id = (student.telegram_chat_id or "") if student else ""
-    if chat_id:
+    if channel in ("auto", "telegram") and chat_id:
         try:
             _send_via_telegram(chat_id, text)
             note.status = "sent"

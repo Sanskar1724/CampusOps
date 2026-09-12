@@ -84,6 +84,50 @@ def test_reminder_created_from_chat(db_session):
     assert db_session.query(models.Reminder).filter_by(student_id=student.id).count() == 1
 
 
+def test_reminder_listing_does_not_create(db_session):
+    student = make_student(db_session)
+    reply = handle_turn(db_session, student, "Show my reminders", now=NOW)
+    assert "none pending" in reply.lower()
+    assert db_session.query(models.Reminder).filter_by(student_id=student.id).count() == 0
+
+
+def test_hide_show_subject_and_day(db_session):
+    student = make_student(db_session)
+    seed_timetable(db_session, student)
+    assert "Hidden 'DBMS'" in handle_turn(db_session, student, "don't show DBMS", now=NOW)
+    reply = handle_turn(db_session, student, "What do I have today?", now=NOW)
+    assert "DBMS" not in reply  # hidden from views
+    assert "visible again" in handle_turn(db_session, student, "show DBMS again", now=NOW).lower()
+    assert "Hidden Saturdays" in handle_turn(
+        db_session, student, "don't show anything on Saturdays", now=NOW)
+    assert "Saturday" in handle_turn(db_session, student, "what did I hide?", now=NOW)
+    assert "visible again" in handle_turn(db_session, student, "show everything again", now=NOW)
+
+
+def test_hide_stoplist_falls_through(db_session):
+    student = make_student(db_session)
+    seed_timetable(db_session, student)
+    reply = handle_turn(db_session, student, "don't show me emails", now=NOW)
+    assert "Hidden" not in reply  # not a timetable request
+
+
+def test_delete_class_from_chat(db_session):
+    student = make_student(db_session)
+    seed_timetable(db_session, student)
+    reply = handle_turn(db_session, student, "delete OS class", now=NOW)
+    assert "Deleted 1 'OS'" in reply
+    assert db_session.query(models.TimetableEntry).filter_by(
+        student_id=student.id, subject="OS").count() == 0
+    assert "couldn't find" in handle_turn(
+        db_session, student, "delete Biology class", now=NOW)
+
+
+def test_guide_pointer_in_context(db_session):
+    student = make_student(db_session)
+    reply = handle_turn(db_session, student, "What should I focus on today?", now=NOW)
+    assert "APP GUIDE" in reply  # DevLLM echoes retrieved context verbatim
+
+
 def test_student_isolation(db_session):
     alice = make_student(db_session, prn="A1", college_email="a@college.edu")
     bob = make_student(db_session, prn="B1", college_email="b@college.edu")
