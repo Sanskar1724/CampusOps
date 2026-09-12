@@ -62,6 +62,7 @@ Design: [`docs/AGENT.md`](docs/AGENT.md).
 | [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) | End-user manual (also served in-app at Help) |
 | [`docs/USER_CARD_SPEC.md`](docs/USER_CARD_SPEC.md) | User-card markdown contract for the system prompt |
 | [`docs/AGENT.md`](docs/AGENT.md) | Conversational pipeline: retrieve → compose → fallback |
+| [`docs/PROJECT_REPORT.md`](docs/PROJECT_REPORT.md) | Full audit: features, verification, limits |
 | [`docs/BACKEND.md`](docs/BACKEND.md) | Service layout, DB/migrations, auth model |
 | [`docs/FRONTEND.md`](docs/FRONTEND.md) | Pages, conventions, build |
 | [`docs/API.md`](docs/API.md) | Every endpoint + auth |
