@@ -12,6 +12,14 @@ function GitHubMark({ className = "w-4 h-4" }: { className?: string }) {
   );
 }
 
+function TelegramMark({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M21.9 4.6 2.7 12.1c-.65.25-.66 1.16-.02 1.42l4.7 1.82 1.8 5.64c.25.77 1.23.86 1.62.16l2.63-3.35 4.95 3.63c.5.37 1.23.06 1.35-.55l2.5-14.6c.12-.71-.6-1.29-1.3-1.07ZM8.6 13.6l9.2-6.9c.14-.1.31.08.2.21l-7.6 8.1-.3 3.1-1.5-4.5Z" />
+    </svg>
+  );
+}
+
 export default function Landing() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-indigo-50 via-white to-slate-50">
@@ -21,6 +29,12 @@ export default function Landing() {
           CampusOps
         </div>
         <div className="flex items-center gap-3">
+          <span
+            title="Current release"
+            className="hidden sm:inline-flex items-center gap-1.5 text-xs font-bold text-white rounded-full px-3 py-1.5 bg-gradient-to-r from-indigo-600 via-violet-600 to-fuchsia-500 shadow-md shadow-indigo-200"
+          >
+            ✨ v1.0
+          </span>
           <a
             href={REPO}
             target="_blank"
@@ -39,14 +53,14 @@ export default function Landing() {
         <div className="text-center py-10">
           <div className="inline-block text-xs font-semibold bg-indigo-100 text-indigo-700 rounded-full px-4 py-1.5 mb-5">
             ✨ One agent for your entire academic life — web, Telegram & email
-          </div>
-          <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight leading-tight">
+          </div>          <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight leading-tight">
             Never miss a class,<br />
-            <span className="text-indigo-600">deadline, or room change</span> again
+            <span className="text-indigo-600">deadline, or any notice</span> again
           </h1>
           <p className="mt-6 text-lg text-slate-600 max-w-2xl mx-auto">
-            CampusOps reads your college email, timetable, and notices — then pings you
-            with a morning brief, urgent alerts, and answers. One brain, everywhere you are.
+            <strong>CampusOps (Campus Operating System)</strong> reads your college
+            email, timetable, and notices — then pings you with a morning brief,
+            urgent alerts, and answers. One brain, everywhere you are.
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             <Link href="/login" className="btn text-base px-6 py-3">Get started — free</Link>
@@ -55,6 +69,21 @@ export default function Landing() {
           <p className="mt-3 text-xs text-slate-500">
             Exploring? Sign in with the sample account <span className="font-mono font-semibold">demo.student@example.com / demo1234</span>
           </p>
+        </div>
+
+        <div className="overflow-hidden mb-12 [mask-image:linear-gradient(to_right,transparent,black_10%,black_90%,transparent)]">
+          <div className="flex gap-2.5 w-max animate-[ticker_28s_linear_infinite]">
+            {[0, 1].map((copy) => (
+              <div key={copy} className="flex gap-2.5" aria-hidden={copy === 1}>
+                {["/today — today's classes", "🔔 class-start pings", "🚨 room-change radar", "⏰ deadline alerts", "🎯 focus engine", "/brief — morning brief", "📄 PDFs that answer back", "🙈 hide anything", "/deadlines", "🌅 exams + reminders"].map((t) => (
+                  <span key={`${copy}-${t}`} className="whitespace-nowrap text-xs font-medium bg-white border border-slate-200 rounded-full px-3.5 py-1.5 shadow-sm text-slate-600">
+                    {t}
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
+          <style>{`@keyframes ticker { from { transform: translateX(0) } to { transform: translateX(-50%) } }`}</style>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 max-w-4xl mx-auto mb-12">
@@ -122,9 +151,10 @@ export default function Landing() {
               href="https://t.me/Sankiyy_bot"
               target="_blank"
               rel="noopener noreferrer"
-              className="btn mt-5 inline-flex"
+              className="btn mt-5 inline-flex items-center gap-2"
             >
-              ✈️ Open @Sankiyy_bot
+              <TelegramMark className="w-4 h-4" />
+              Open @Sankiyy_bot
             </a>
           </div>
           <TelegramDemo />
@@ -145,8 +175,8 @@ export default function Landing() {
           <div>
             <div className="font-semibold mb-2">Team</div>
             <ul className="space-y-1.5 text-slate-600">
-              <li>👑 Owner — <a className="text-indigo-600 hover:underline" href="https://github.com/Sanskar1724" target="_blank" rel="noopener noreferrer">Sanskar1724</a></li>
-              <li>🌟 Contributor — <a className="text-indigo-600 hover:underline" href="https://github.com/Pratiksha2968" target="_blank" rel="noopener noreferrer">Pratiksha2968</a></li>
+              <li><a className="text-indigo-600 font-medium hover:underline" href="https://github.com/Sanskar1724" target="_blank" rel="noopener noreferrer">Sanskar1724</a></li>
+              <li><a className="text-indigo-600 font-medium hover:underline" href="https://github.com/Pratiksha2968" target="_blank" rel="noopener noreferrer">Pratiksha2968</a></li>
               <li><a className="text-indigo-600 hover:underline" href={`${REPO}/blob/master/CONTRIBUTORS.md`} target="_blank" rel="noopener noreferrer">All contributors →</a></li>
             </ul>
           </div>
@@ -165,7 +195,7 @@ export default function Landing() {
             <ul className="space-y-1.5 text-slate-600">
               <li><a className="text-indigo-600 hover:underline font-medium" href={REPO} target="_blank" rel="noopener noreferrer"><span className="inline-flex items-center gap-1.5"><GitHubMark className="w-3.5 h-3.5" /> GitHub repository</span></a></li>
               <li><a className="text-indigo-600 hover:underline" href={`${REPO}/issues`} target="_blank" rel="noopener noreferrer">🐞 Report an issue</a></li>
-              <li><a className="text-indigo-600 hover:underline" href="https://t.me/Sankiyy_bot" target="_blank" rel="noopener noreferrer">✈️ Telegram bot</a></li>
+              <li><a className="text-indigo-600 hover:underline" href="https://t.me/Sankiyy_bot" target="_blank" rel="noopener noreferrer"><span className="inline-flex items-center gap-1.5"><TelegramMark className="w-3.5 h-3.5" /> Telegram bot</span></a></li>
               <li><Link className="text-indigo-600 hover:underline" href="/help">❓ In-app help</Link></li>
             </ul>
           </div>
