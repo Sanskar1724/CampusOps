@@ -16,7 +16,11 @@ from backend.app import config, models
 from backend.app.agents.core import handle_turn
 from backend.app.comms.service import expand_command, reply_with_actions
 from backend.app.db import SessionLocal
-from backend.app.memory import get_or_create_conversation, log_message
+from backend.app.memory import (
+    get_or_create_conversation,
+    log_message,
+    recent_messages,
+)
 
 
 def get_or_create_student_for_sender(db, sender: str) -> models.Student:
@@ -80,10 +84,11 @@ def register(cx: Caspian) -> Caspian:
             conv = get_or_create_conversation(
                 db, channel=str(channel), thread_id=str(msg.thread_id),
                 sender=msg.sender, student_id=student.id)
+            history = recent_messages(db, conv.id, limit=6)
             log_message(db, conv.id, "user", msg.text)
             try:
                 reply = handle_turn(db, student, expand_command(msg.text),
-                                    channel=str(channel))
+                                    channel=str(channel), history=history)
             except Exception:
                 traceback.print_exc()
                 reply = ("Something went wrong on my side. Your message is saved — "
@@ -117,7 +122,8 @@ def register(cx: Caspian) -> Caspian:
                 thread_id=str(getattr(action, "thread_id", "")),
                 student_id=student.id)
             log_message(db, conv.id, "user", f"[{name}]")
-            reply = handle_turn(db, student, question, channel="caspian")
+            history = recent_messages(db, conv.id, limit=6)[:-1]
+            reply = handle_turn(db, student, question, channel="caspian", history=history)
             log_message(db, conv.id, "agent", reply)
             reply_with_actions(thread, reply)
         finally:

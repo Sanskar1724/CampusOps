@@ -282,7 +282,7 @@ def test_short_answers_are_targeted(db_session):
     student = make_student(db_session)
     seed_timetable(db_session, student)
     tg = lambda text: handle_turn(db_session, student, text, channel="caspian", now=NOW)
-    assert tg("hi") == "Hi Test! 👋 What do you need? Try a button below, /today, /next, /deadlines — or /help for everything."
+    assert tg("hi").startswith("Hi Test! 👋")
     assert tg("thanks!") == "Anytime! 👍 Good luck with classes today."
     nxt = tg("what is my next class?")
     assert "DBMS" in nxt and "Deadlines" not in nxt and "Exams" not in nxt
@@ -304,3 +304,32 @@ def test_web_short_answers_not_dumps(db_session):
     assert "DBMS" in nxt and "Deadlines:" not in nxt and "Exams:" not in nxt
     assert "No exams scheduled" in web("any exams coming?")
     assert "APP GUIDE" in web("what should I focus on today?")  # full path keeps guide
+
+
+def test_model_first_composition(db_session, monkeypatch):
+    """The model voices targeted facts with a personal user card + history —
+    templates never answer schedule questions anymore."""
+    import backend.app.agents.core as core_mod
+    seen = {}
+
+    class Fake:
+        def complete(self, system, user, context="", history=None):
+            seen.update(system=system, user=user, context=context, history=history)
+            return "COMPOSED!"
+
+    monkeypatch.setattr(core_mod, "get_llm", lambda: Fake())
+    student = make_student(db_session)
+    seed_timetable(db_session, student)
+    hist = [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "Hi!"}]
+    reply = handle_turn(db_session, student, "What is my next class?",
+                        channel="caspian", now=NOW, history=hist)
+    assert reply == "COMPOSED!"
+    assert "Test Student" in seen["system"] and "B1" in seen["system"]
+    assert "DBMS" in seen["system"]  # user card carries their classes
+    assert "Next class" in seen["context"] and "Deadlines" not in seen["context"]
+    assert seen["history"] == hist
+    assert "APP GUIDE" not in seen["context"] and "120 words" in seen["system"]
+    web_reply = handle_turn(db_session, student, "What should I focus on today?",
+                            channel="web", now=NOW)
+    assert web_reply == "COMPOSED!"
+    assert "APP GUIDE" in seen["context"]  # web keeps UI pointers

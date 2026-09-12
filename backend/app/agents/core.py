@@ -170,68 +170,60 @@ def _handle_visibility(db, student, text: str, subjects: list[str]) -> str | Non
     return None
 
 
-def _handle_chat_short(db, student, text: str, c, low: str, now) -> str | None:
-    """One question → one short answer (chat channels). Small talk gets a
-    one-liner; each schedule question returns ONLY that slice — never the
-    whole brief. Returns None when the turn needs the full pipeline."""
+def _handle_small_talk(student: models.Student, low: str) -> str | None:
+    """Greetings/thanks/goodbyes get an instant human one-liner — no retrieval,
+    no model call. Everything else returns None to continue the pipeline."""
     name = (student.full_name or "there").split()[0]
     stripped = low.strip()
-
-    has = lambda *words: any(w in low for w in words)  # noqa: E731
-    if "remind me" in low or has("focus", "brief", "priorit", "do now",
-                                 "what next", "right now", "summary"):
-        return None  # richer flows own these (full plan / reminder creation)
-
     if re.fullmatch(r"(hi+|hii+|hello+|hey+|yo|namaste|good morning|good evening|good afternoon)[.! ]*", stripped):
-        return (f"Hi {name}! 👋 What do you need? Try a button below, "
-                "/today, /next, /deadlines — or /help for everything.")
+        return (f"Hi {name}! 👋 What do you need? Try 'what's my next class', "
+                "'deadlines', or 'focus' — or /help on Telegram.")
     if re.fullmatch(r"(thanks?|thank you|thx|shukriya|dhanyavad)[.! ]*", stripped):
         return "Anytime! 👍 Good luck with classes today."
     if re.fullmatch(r"(bye|goodbye|see you|good night)[.! ]*", stripped):
         return "Bye! 👋 Ping me anytime — I'll keep an eye on your deadlines."
+    return None
 
+
+def _gather_targeted(c, low: str, now, text: str) -> list[str] | None:
+    """One question → one tight fact slice for the model to voice. Returns None
+    when the turn wants the full pipeline (focus/brief/reminders/actions)."""
+    has = lambda *words: any(w in low for w in words)  # noqa: E731
+    if "remind me" in low or has("focus", "brief", "priorit", "do now",
+                                 "what next", "right now", "summary"):
+        return None
     if "next class" in low or re.search(r"\bnext\b.*\b(class|lecture)\b", low):
         nxt = tools.get_next_class(c)
-        return (f"Next: {nxt['subject']} at {nxt['start']} (Room {nxt['room'] or '—'})."
-                if nxt else "No upcoming classes on your timetable. Enjoy! 🎉")
+        return ["Next class: " + (
+            f"{nxt['subject']} at {nxt['start']} (Room {nxt['room'] or '—'})"
+            if nxt else "none scheduled — enjoy!")]
     if has("tomorrow") and not has("today", "week", "deadline", "exam"):
-        return f"Tomorrow: {_fmt_classes(tools.get_tomorrow_schedule(c))}."
+        return [f"Tomorrow's classes: {_fmt_classes(tools.get_tomorrow_schedule(c))}."]
     if has("today") and not has("tomorrow", "week", "deadline", "exam"):
-        return f"Today ({DAY_NAMES[now.weekday()]}): {_fmt_classes(tools.get_today_schedule(c))}."
+        return [f"Today ({DAY_NAMES[now.weekday()]}): {_fmt_classes(tools.get_today_schedule(c))}."]
     if has("week") and not has("deadline", "exam"):
         parts = [f"{day}: {_fmt_classes(tools.get_day_schedule(c, d))}"
                  for d, day in enumerate(DAY_NAMES)
                  if tools.get_day_schedule(c, d)]
-        return "Your week:\n" + "\n".join(parts) if parts else "Nothing scheduled this week. 🎉"
+        return ["Week plan:\n" + "\n".join(parts) if parts else "Nothing scheduled this week."]
     if has("deadline", "assignment", "due", "submission") and not has("exam"):
         dl = tools.get_upcoming_deadlines(c, days=14)[:4]
-        if not dl:
-            return "No open deadlines. All clear! 🎉"
-        return "Deadlines:\n" + "\n".join(
-            f"• {d['title']} — due {d['due']}" for d in dl)
+        return ["Open deadlines:\n" + "\n".join(
+            f"• {d['title']} — due {d['due']} [{d['priority']}]" for d in dl)
+            if dl else "No open deadlines."]
     if "exam" in low and not has("deadline", "assignment"):
         ex = tools.get_upcoming_exams(c)[:3]
-        if not ex:
-            return "No exams scheduled. 🎉"
-        return "Exams:\n" + "\n".join(
+        return ["Upcoming exams:\n" + "\n".join(
             f"• {e['subject']} — {e['at'] or 'date TBA'}"
             + (f" (Room {e['room']})" if e.get("room") else "") for e in ex)
+            if ex else "No exams scheduled."]
     return None
 
 
-def handle_turn(db: Session, student: models.Student, text: str,
-                channel: str = "caspian", now: datetime | None = None) -> str:
-    now = now or utcnow()
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=timezone.utc)
-
-    if not onboarding.is_done(student):
-        return onboarding.advance(db, student, text)
-
-    c = make_ctx(db=db, student=student, now=now)
-    low = text.lower()
-    sections: list[str] = []
-
+def _gather_full(c, low: str, now, text: str, channel: str) -> list[str]:
+    """Full retrieval for open questions (focus, brief, updates, docs, or
+    anything unrecognized): the whole relevant picture, compacted for chat
+    channels and complete on web. Returns fact sections for the model."""
     wants = {
         "schedule": any(w in low for w in
                          ["class", "timetable", "schedule", "today", "tomorrow", "lecture", "next"]),
@@ -246,6 +238,78 @@ def handle_turn(db: Session, student: models.Student, text: str,
                     ["focus", "plan", "priorit", "brief", "morning", "do today", "summary of today",
                      "do now", "what next", "right now"]),
     }
+    out: list[str] = []
+    compact = (channel != "web")  # Telegram/email: answer asked, not everything
+    if wants["plan"] or not any(wants.values()):
+        plan = tools.generate_daily_plan(c)
+        focus = tools.get_focus_now(c)
+        out.append(f"Today ({DAY_NAMES[now.weekday()]}): {_fmt_classes(plan['today'])}.")
+        out.append(f"Next class: {plan['next_class']['subject']} "
+                   f"{plan['next_class']['start']} Room {plan['next_class']['room'] or '—'}"
+                   if plan["next_class"] else "Next class: none scheduled.")
+        dl = plan["deadlines"]
+        if dl:
+            ranked_lines = []
+            for d in dl[:3 if compact else 5]:
+                _, label = tools.urgency_score(d, now)
+                ranked_lines.append(f"{d['title']} (due {d['due']}) [{label}]")
+            out.append("Deadlines (ranked): " + "; ".join(ranked_lines) + ".")
+        else:
+            out.append("Deadlines: none open.")
+        ex = plan["exams"][:2 if compact else 3]
+        out.append("Exams: " + ("; ".join(
+            f"{e['subject']} at {e['at']}" for e in ex) if ex else "none scheduled."))
+        if not compact:
+            imp = plan["important"][:3]
+            out.append("Important: " + ("; ".join(
+                f"{i['title']} [{i['priority']}]" for i in imp) if imp else "nothing new."))
+        out.append(f"🎯 Do now: {focus['do_now']}")
+    else:
+        if wants["schedule"]:
+            out.append(f"Today: {_fmt_classes(tools.get_today_schedule(c))}.")
+            if "tomorrow" in low or "week" in low:
+                out.append(f"Tomorrow: {_fmt_classes(tools.get_tomorrow_schedule(c))}.")
+            nxt = tools.get_next_class(c)
+            out.append(f"Next: {nxt['subject']} {nxt['start']}" if nxt else "Next: none.")
+        if wants["deadlines"]:
+            dl = tools.get_upcoming_deadlines(c)
+            out.append("Deadlines: " + ("; ".join(
+                f"{d['title']} (due {d['due']})" for d in dl) if dl else "none open."))
+        if wants["exams"]:
+            ex = tools.get_upcoming_exams(c)
+            out.append("Exams: " + ("; ".join(
+                f"{e['subject']} at {e['at']}" for e in ex) if ex else "none scheduled."))
+        if wants["updates"]:
+            imp = tools.get_important_updates(c)
+            out.append("Updates: " + ("; ".join(
+                f"{i['title']} [{i['priority']}]" for i in imp) if imp else "nothing new."))
+        if wants["docs"]:
+            hits = tools.search_documents(c, text)
+            out.append("Documents: " + ("; ".join(
+                f"{h['filename']}: {h['text'][:200]}" for h in hits) if hits else "no matches."))
+            mems = tools.search_memory(c, text)[:3]
+            if mems:
+                out.append("Memory: " + "; ".join(f"{m['key']}: {m['value'][:200]}" for m in mems))
+    return out
+
+
+def handle_turn(db: Session, student: models.Student, text: str,
+                channel: str = "caspian", now: datetime | None = None,
+                history: list[dict] | None = None) -> str:
+    now = now or utcnow()
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+
+    if not onboarding.is_done(student):
+        return onboarding.advance(db, student, text)
+
+    small = _handle_small_talk(student, text.lower())
+    if small is not None:
+        return small
+
+    c = make_ctx(db=db, student=student, now=now)
+    low = text.lower()
+    sections: list[str] = []
 
     reminder = _parse_reminder(text, now)
     if reminder:
@@ -265,65 +329,22 @@ def handle_turn(db: Session, student: models.Student, text: str,
     if visibility_reply is not None:
         return visibility_reply
 
-    short = _handle_chat_short(db, student, text, c, low, now)
-    if short is not None:
-        return short
+    targeted = _gather_targeted(c, low, now, text)
+    if targeted is None:
+        targeted = _gather_full(c, low, now, text, channel)
+    sections.extend(targeted)
 
-    if wants["plan"] or not any(wants.values()):
-        plan = tools.generate_daily_plan(c)
-        focus = tools.get_focus_now(c)
-        compact = (channel != "web")  # Telegram/email: answer asked, not everything
-        sections.append(f"Today ({DAY_NAMES[now.weekday()]}): {_fmt_classes(plan['today'])}.")
-        sections.append(f"Next class: {plan['next_class']['subject']} "
-                        f"{plan['next_class']['start']} Room {plan['next_class']['room'] or '—'}"
-                        if plan["next_class"] else "Next class: none scheduled.")
-        dl = plan["deadlines"]
-        if dl:
-            ranked_lines = []
-            for d in dl[:3 if compact else 5]:
-                _, label = tools.urgency_score(d, now)
-                ranked_lines.append(f"{d['title']} (due {d['due']}) [{label}]")
-            sections.append("Deadlines (ranked): " + "; ".join(ranked_lines) + ".")
-        else:
-            sections.append("Deadlines: none open.")
-        ex = plan["exams"][:2 if compact else 3]
-        sections.append("Exams: " + ("; ".join(
-            f"{e['subject']} at {e['at']}" for e in ex) if ex else "none scheduled."))
-        if not compact:
-            imp = plan["important"][:3]
-            sections.append("Important: " + ("; ".join(
-                f"{i['title']} [{i['priority']}]" for i in imp) if imp else "nothing new."))
-        sections.append(f"🎯 Do now: {focus['do_now']}")
-    else:
-        if wants["schedule"]:
-            sections.append(f"Today: {_fmt_classes(tools.get_today_schedule(c))}.")
-            if "tomorrow" in low or "week" in low:
-                sections.append(f"Tomorrow: {_fmt_classes(tools.get_tomorrow_schedule(c))}.")
-            nxt = tools.get_next_class(c)
-            sections.append(f"Next: {nxt['subject']} {nxt['start']}" if nxt else "Next: none.")
-        if wants["deadlines"]:
-            dl = tools.get_upcoming_deadlines(c)
-            sections.append("Deadlines: " + ("; ".join(
-                f"{d['title']} (due {d['due']})" for d in dl) if dl else "none open."))
-        if wants["exams"]:
-            ex = tools.get_upcoming_exams(c)
-            sections.append("Exams: " + ("; ".join(
-                f"{e['subject']} at {e['at']}" for e in ex) if ex else "none scheduled."))
-        if wants["updates"]:
-            imp = tools.get_important_updates(c)
-            sections.append("Updates: " + ("; ".join(
-                f"{i['title']} [{i['priority']}]" for i in imp) if imp else "nothing new."))
-        if wants["docs"]:
-            hits = tools.search_documents(c, text)
-            sections.append("Documents: " + ("; ".join(
-                f"{h['filename']}: {h['text'][:200]}" for h in hits) if hits else "no matches."))
-            mems = tools.search_memory(c, text)[:3]
-            if mems:
-                sections.append("Memory: " + "; ".join(f"{m['key']}: {m['value'][:200]}" for m in mems))
-
-    profile = (f"Student: {student.full_name}, {student.department} Div-{student.division} "
-               f"Batch-{student.batch}, Sem {student.semester}.")
-    context = profile + "\n" + "\n".join(sections)
+    from backend.app.user_card import build_user_card_md
+    card = build_user_card_md(db, student, now)
+    style = (
+        "Chat style: SHORT (under 120 words), warm, specific, varied wording — "
+        "answer exactly what was asked, name one next step at most. Never repeat "
+        "a previous reply verbatim."
+        if channel != "web" else
+        "Format: short punchy sections with emoji headers, one line per item, "
+        "then a final 'Do now' line. Keep under 180 words, varied wording.")
+    system = SYSTEM_BASE + "\n\n" + card + "\n\n" + style
+    context = "\n".join(sections)
     if channel == "web":
         uctx = get_user_context(db, student)
         guide = [f"View: {uctx.batch_label}.", GUIDE_POINTER]
@@ -331,4 +352,4 @@ def handle_turn(db: Session, student: models.Student, text: str,
             guide.append(f"{len(uctx.hidden_subjects)} subject(s) + {len(uctx.hidden_days)} day(s) "
                          "hidden by student and excluded above (mention only if asked).")
         context += "\n" + "\n".join(guide)
-    return get_llm().complete(SYSTEM_BASE, text, context=context)
+    return get_llm().complete(system, text, context=context, history=history)

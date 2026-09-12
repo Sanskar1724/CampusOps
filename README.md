@@ -46,11 +46,22 @@ Live channels need keys (`.env.example` documents all): `CASPIAN_API_KEY` +
 `CAMPUSOPS_MAILBOX` for email, `TELEGRAM_BOT_TOKEN` for the bot, Google OAuth
 client for Gmail + Google sign-in. Everything else works offline.
 
+## 🧠 Conversational agent (not templates)
+
+Every reply is composed live by the model from three inputs: a per-turn
+**user card** (your name, batch, today's classes, deadlines, memories —
+see [`docs/USER_CARD_SPEC.md`](docs/USER_CARD_SPEC.md)), only the facts the
+question needs, and the last 6 turns of conversation. Greetings and action
+confirmations answer instantly; everything else is voiced fresh each time.
+Design: [`docs/AGENT.md`](docs/AGENT.md).
+
 ## 📚 Docs
 
 | Doc | Covers |
 |---|---|
 | [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) | End-user manual (also served in-app at Help) |
+| [`docs/USER_CARD_SPEC.md`](docs/USER_CARD_SPEC.md) | User-card markdown contract for the system prompt |
+| [`docs/AGENT.md`](docs/AGENT.md) | Conversational pipeline: retrieve → compose → fallback |
 | [`docs/BACKEND.md`](docs/BACKEND.md) | Service layout, DB/migrations, auth model |
 | [`docs/FRONTEND.md`](docs/FRONTEND.md) | Pages, conventions, build |
 | [`docs/API.md`](docs/API.md) | Every endpoint + auth |

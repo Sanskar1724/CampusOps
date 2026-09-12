@@ -561,10 +561,15 @@ chat_router = APIRouter(prefix="/api/chat", tags=["chat"])
 @chat_router.post("/", response_model=schemas.ChatOut)
 def chat(payload: schemas.ChatIn, db: Session = Depends(get_db),
          student: models.Student = Depends(Me)):
-    from backend.app.memory import get_or_create_conversation, log_message  # noqa: E402
+    from backend.app.memory import (  # noqa: E402
+        get_or_create_conversation,
+        log_message,
+        recent_messages,
+    )
     conv = get_or_create_conversation(db, channel="web", student_id=student.id)
+    history = recent_messages(db, conv.id, limit=6)
     log_message(db, conv.id, "user", payload.text)
-    reply = handle_turn(db, student, payload.text, channel="web")
+    reply = handle_turn(db, student, payload.text, channel="web", history=history)
     log_message(db, conv.id, "agent", reply)
     return {"reply": reply}
 

@@ -28,7 +28,8 @@ SYSTEM_BASE = (
 
 
 class LLMClient(Protocol):
-    def complete(self, system: str, user: str, context: str = "") -> str: ...
+    def complete(self, system: str, user: str, context: str = "",
+                 history: list[dict] | None = None) -> str: ...
 
 
 class OpenAICompatibleLLM:
@@ -37,16 +38,22 @@ class OpenAICompatibleLLM:
         self._base_url = base_url.rstrip("/")
         self._model = model
 
-    def complete(self, system: str, user: str, context: str = "") -> str:
+    def complete(self, system: str, user: str, context: str = "",
+                 history: list[dict] | None = None) -> str:
         messages = [{"role": "system", "content": system}]
         if context:
             messages.append({"role": "system", "content": f"RETRIEVED CONTEXT:\n{context}"})
+        for turn in history or []:
+            if turn.get("role") in ("user", "assistant") and turn.get("content"):
+                messages.append({"role": turn["role"],
+                                 "content": str(turn["content"])[:2000]})
         messages.append({"role": "user", "content": user})
         try:
             resp = httpx.post(
                 f"{self._base_url}/chat/completions",
                 headers={"Authorization": f"Bearer {self._api_key}"},
-                json={"model": self._model, "messages": messages, "temperature": 0.2},
+                json={"model": self._model, "messages": messages,
+                      "temperature": 0.7, "max_tokens": 800},
                 timeout=60,
             ).json()
         except Exception as exc:
@@ -59,7 +66,8 @@ class OpenAICompatibleLLM:
 class DevLLM:
     """Offline composer: sections the retrieved context, never hallucinates."""
 
-    def complete(self, system: str, user: str, context: str = "") -> str:
+    def complete(self, system: str, user: str, context: str = "",
+                 history: list[dict] | None = None) -> str:
         if not context.strip():
             return (
                 "I don't have that in your academic memory yet. Add your timetable, "
@@ -77,8 +85,9 @@ class ResilientLLM:
         self._primary = primary
         self._fallback = fallback
 
-    def complete(self, system: str, user: str, context: str = "") -> str:
-        reply = self._primary.complete(system, user, context)
+    def complete(self, system: str, user: str, context: str = "",
+                 history: list[dict] | None = None) -> str:
+        reply = self._primary.complete(system, user, context, history)
         if reply.startswith("(model error") or reply.startswith("I couldn't reach"):
             return self._fallback.complete(system, user, context)
         return reply

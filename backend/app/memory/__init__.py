@@ -88,6 +88,14 @@ def get_or_create_conversation(db: Session, *, channel: str,
     if thread_id:
         conv = db.scalar(select(models.Conversation).where(
             models.Conversation.caspian_thread_id == thread_id))
+    if conv is None and student_id and not thread_id:
+        # Web chat has no thread id: keep ONE rolling conversation per
+        # student+channel so history actually accumulates across turns.
+        conv = db.scalar(select(models.Conversation).where(
+            models.Conversation.student_id == student_id,
+            models.Conversation.channel == channel,
+            models.Conversation.caspian_thread_id.is_(None)).order_by(
+            models.Conversation.id.desc()))
     if conv is None:
         conv = models.Conversation(channel=channel, caspian_thread_id=thread_id,
                                    caspian_sender=sender, student_id=student_id)
@@ -112,3 +120,14 @@ def get_or_create_conversation(db: Session, *, channel: str,
 def log_message(db: Session, conversation_id: int, role: str, text: str) -> None:
     db.add(models.ChatMessage(conversation_id=conversation_id, role=role, text=text[:4000]))
     db.commit()
+
+
+def recent_messages(db: Session, conversation_id: int, limit: int = 6) -> list[dict]:
+    """Last turns as LLM history (oldest first). `agent` maps to `assistant`."""
+    from sqlalchemy import select as _select
+    rows = list(db.scalars(_select(models.ChatMessage).where(
+        models.ChatMessage.conversation_id == conversation_id
+    ).order_by(models.ChatMessage.id.desc()).limit(limit)))
+    history = [{"role": "assistant" if m.role == "agent" else "user", "content": m.text}
+               for m in reversed(rows)]
+    return history

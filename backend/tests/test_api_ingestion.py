@@ -275,6 +275,19 @@ def test_help_endpoint(db_session):
     assert "Timetable" in md and "Telegram" in md
 
 
+def test_chat_threading_history(db_session):
+    from backend.app import models
+    headers = register("hist@college.edu", "HST1")
+    me = client.get("/api/auth/me", headers=headers).json()
+    client.post("/api/chat/", json={"text": "hi"}, headers=headers)
+    client.post("/api/chat/", json={"text": "what is my next class?"}, headers=headers)
+    conv = db_session.query(models.Conversation).filter_by(
+        student_id=me["id"]).one()
+    roles = [m.role for m in db_session.query(models.ChatMessage).filter_by(
+        conversation_id=conv.id).order_by(models.ChatMessage.id)]
+    assert roles == ["user", "agent", "user", "agent"]
+
+
 def test_garbage_detector():
     from backend.app.ingestion.extract import garbage_score, is_garbage_text
     assert garbage_score("DBMS mid-semester exam Monday Room 405") < 0.3
