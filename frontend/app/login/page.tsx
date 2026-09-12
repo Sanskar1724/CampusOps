@@ -30,6 +30,7 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-indigo-50 via-white to-slate-100">
       <div className="w-full max-w-sm space-y-3">
       <form onSubmit={submit} className="card w-full space-y-4">
+        <Link href="/" className="text-sm text-slate-500 hover:text-indigo-600">← Back to home</Link>
         <h1 className="text-xl font-bold">🎓 Sign in to CampusOps</h1>
         <div className="text-xs bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-lg p-2.5">
           Just exploring? One click fills a sample account — no setup needed.

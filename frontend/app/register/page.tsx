@@ -38,6 +38,7 @@ export default function Register() {
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
       <form onSubmit={submit} className="card w-full max-w-md space-y-3">
+        <Link href="/" className="text-sm text-slate-500 hover:text-indigo-600">← Back to home</Link>
         <h1 className="text-xl font-bold">Create your CampusOps profile</h1>
         {error && <div className="text-sm text-red-600">{error}</div>}
         <div className="grid grid-cols-2 gap-3">

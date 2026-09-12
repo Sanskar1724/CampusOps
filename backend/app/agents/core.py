@@ -301,7 +301,11 @@ def handle_turn(db: Session, student: models.Student, text: str,
         now = now.replace(tzinfo=timezone.utc)
 
     if not onboarding.is_done(student):
-        return onboarding.advance(db, student, text)
+        reply = onboarding.advance(db, student, text)
+        if reply is not None:
+            return reply
+        # Academic question asked mid-onboarding: fall through and answer
+        # it normally without touching the pending onboarding fields.
 
     small = _handle_small_talk(student, text.lower())
     if small is not None:

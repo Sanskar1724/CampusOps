@@ -37,7 +37,7 @@ class Student(Base):
     full_name: Mapped[str] = mapped_column(String(200), default="")
     prn: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     department: Mapped[str] = mapped_column(String(120), default="")
-    division: Mapped[str] = mapped_column(String(16), default="")
+    division: Mapped[str] = mapped_column(String(100), default="")
     batch: Mapped[str] = mapped_column(String(16), default="")
     roll_number: Mapped[str] = mapped_column(String(32), default="")
     semester: Mapped[str] = mapped_column(String(16), default="")

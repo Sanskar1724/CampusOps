@@ -90,6 +90,7 @@ def register(cx: Caspian) -> Caspian:
                 reply = handle_turn(db, student, expand_command(msg.text),
                                     channel=str(channel), history=history)
             except Exception:
+                db.rollback()
                 traceback.print_exc()
                 reply = ("Something went wrong on my side. Your message is saved — "
                          "please try again in a moment.")
@@ -98,6 +99,9 @@ def register(cx: Caspian) -> Caspian:
                 reply = FIRST_TIME_GUIDE + reply
             log_message(db, conv.id, "agent", reply)
             reply_with_actions(thread, reply)
+        except Exception:
+            db.rollback()
+            raise
         finally:
             db.close()
 
@@ -126,6 +130,9 @@ def register(cx: Caspian) -> Caspian:
             reply = handle_turn(db, student, question, channel="caspian", history=history)
             log_message(db, conv.id, "agent", reply)
             reply_with_actions(thread, reply)
+        except Exception:
+            db.rollback()
+            raise
         finally:
             db.close()
 
@@ -138,5 +145,8 @@ def handle_text_offline(student_id_sender: str, text: str) -> str:
     try:
         student = get_or_create_student_for_sender(db, student_id_sender)
         return handle_turn(db, student, text)
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()

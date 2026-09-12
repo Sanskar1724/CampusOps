@@ -30,6 +30,31 @@ DONE_FMT = ("Thanks {name}! Your profile is saved. 🎉\n\n"
             "On Telegram, tap the buttons below any reply, or try /today /deadlines /help. "
             "Hide anything with 'hide OS' — unhide with 'show everything'.")
 
+# Academic questions must never be swallowed as an onboarding answer
+# (e.g. "What do I have today?" was saved as the division field).
+ACADEMIC_QUESTION_RE = re.compile(
+    r"\b(what|when|where|which|who|how|show|list|do i|is there|are there|"
+    r"today|tomorrow|timetable|class|deadline|exam|reminder|task|brief|"
+    r"focus|schedule|room|change|next|week|assignment|test|syllabus|"
+    r"holiday|attendance|marks?|grade|fee|library)\b"
+    r"|\?"
+)
+
+
+def looks_like_academic_question(text: str) -> bool:
+    """True when `text` reads like a normal academic question/request.
+
+    Long multi-word messages are questions, not single onboarding field
+    values — route them to the normal agent instead of saving them as
+    e.g. the student's division.
+    """
+    value = text.strip()
+    if not value:
+        return False
+    if len(value.split()) >= 4:
+        return True
+    return bool(ACADEMIC_QUESTION_RE.search(value.lower()))
+
 
 def _draft(student: models.Student) -> dict:
     return safe_json_loads(student.onboarding_draft, {})
@@ -51,9 +76,14 @@ def next_prompt(student: models.Student) -> str:
     return STEPS[0][1]
 
 
-def advance(db: Session, student: models.Student, text: str) -> str:
+def advance(db: Session, student: models.Student, text: str) -> str | None:
     step = student.onboarding_step
     value = text.strip()
+    if step not in ("full_name", "prn", "college_email") and looks_like_academic_question(value):
+        # Normal academic questions (e.g. "What do I have today?") are NOT
+        # onboarding answers — signal the caller to handle them normally
+        # instead of saving them as e.g. the student's division.
+        return None
     draft = _draft(student)
 
     if step == "prn":
