@@ -68,6 +68,8 @@ def register(cx: Caspian) -> Caspian:
             return
         db = SessionLocal()
         try:
+            known = db.scalar(select(models.Student).where(
+                models.Student.caspian_sender == (msg.sender or "unknown")))
             student = get_or_create_student_for_sender(db, msg.sender or "unknown")
             student.caspian_thread_id = str(msg.thread_id)
             chat_id = _telegram_chat_id(msg)
@@ -86,6 +88,9 @@ def register(cx: Caspian) -> Caspian:
                 traceback.print_exc()
                 reply = ("Something went wrong on my side. Your message is saved — "
                          "please try again in a moment.")
+            from backend.app.comms.service import FIRST_TIME_GUIDE
+            if known is None and str(channel) != "web":
+                reply = FIRST_TIME_GUIDE + reply
             log_message(db, conv.id, "agent", reply)
             reply_with_actions(thread, reply)
         finally:

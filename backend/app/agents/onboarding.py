@@ -24,8 +24,11 @@ STEPS: list[tuple[str, str]] = [
 ]
 
 WELCOME_BACK = "Welcome back to CampusOps! You're all set. Ask me anything — try 'What should I focus on today?'"
-DONE_FMT = ("Thanks {name}! Your profile is saved. Ask me anything — "
-            "try 'What should I focus on today?'")
+DONE_FMT = ("Thanks {name}! Your profile is saved. 🎉\n\n"
+            "Quick tour: ask 'What should I focus on today?', "
+            "'What is my next class?', or 'Did my timetable change?'. "
+            "On Telegram, tap the buttons below any reply, or try /today /deadlines /help. "
+            "Hide anything with 'hide OS' — unhide with 'show everything'.")
 
 
 def _draft(student: models.Student) -> dict:

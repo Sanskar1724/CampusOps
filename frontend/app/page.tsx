@@ -25,7 +25,7 @@ export default function Landing() {
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             <Link href="/login" className="btn text-base px-6 py-3">Get started — free</Link>
-            <Link href="/chat" className="btn-ghost text-base px-6 py-3">💬 Talk to the agent</Link>
+            <Link href="/register" className="btn-ghost text-base px-6 py-3">Create account</Link>
           </div>
           <p className="mt-3 text-xs text-slate-500">
             Exploring? Sign in with the sample account <span className="font-mono font-semibold">demo.student@example.com / demo1234</span>

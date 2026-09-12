@@ -16,12 +16,13 @@ from backend.app.comms.client import build_caspian_app
 MAILBOX = "campusops-test"
 
 
-def make_message(text: str, thread_id: str = "thread-test-1") -> Message:
+def make_message(text: str, thread_id: str = "thread-test-1",
+                 sender: str = "student@example.com") -> Message:
     return Message(
         thread_id=thread_id,  # type: ignore[arg-type]
         text=text,
         chat_kind="dm",  # type: ignore[arg-type]
-        sender="student@example.com",
+        sender=sender,
         message_id="msg-1",
     )
 
@@ -78,3 +79,29 @@ def test_telegram_self_host_builds_offline():
                            telegram_via="self-host", dispatch=False)
     assert cx.channels.added() == ["telegram"]
     assert len(cx.app.rules) == 2  # message + action handlers
+
+
+def test_first_time_sender_gets_guide_once(db_session):
+    from backend.app.comms.service import FIRST_TIME_GUIDE
+    cx = build_caspian_app(mailbox=MAILBOX, dispatch=False)
+    handler = next(iter(cx._handlers.values()))  # noqa: SLF001
+    first = Thread(thread_id="guide-thread-1")
+    handler(first, make_message("hi there", sender="guide-new@example.com"), HandlerContext())
+    text1 = getattr(first.commands[0], "text", "")
+    assert text1.startswith("👋 Welcome to CampusOps")
+    assert "PRN" in text1  # first message became their name; onboarding continues
+    second = Thread(thread_id="guide-thread-1")
+    handler(second, make_message("Rahul", sender="guide-new@example.com"), HandlerContext())
+    text2 = getattr(second.commands[0], "text", "")
+    assert not text2.startswith("👋 Welcome to CampusOps")
+
+
+def test_reply_formatting_and_buttons():
+    from backend.app.comms.service import format_reply, quick_buttons
+    assert format_reply("a\n\n\n\nb") == "a\n\nb"
+    long_text = "x\n" * 5000
+    assert len(format_reply(long_text)) < len(long_text)
+    assert "continued" in format_reply(long_text)
+    buttons = quick_buttons()
+    assert len(buttons) == 7
+    assert {b.data for b in buttons} >= {"cmd:today", "cmd:week", "cmd:reminders", "cmd:help"}

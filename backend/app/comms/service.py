@@ -17,6 +17,8 @@ QUICK_ACTIONS: tuple[tuple[str, str], ...] = (
     ("➡️ Next class", "cmd:next"),
     ("⏰ Deadlines", "cmd:deadlines"),
     ("🎯 Focus", "cmd:focus"),
+    ("📆 Week", "cmd:week"),
+    ("🔔 Reminders", "cmd:reminders"),
     ("❓ Help", "cmd:help"),
 )
 #: /commands (Telegram + anywhere) mapped to plain agent questions.
@@ -51,14 +53,41 @@ def quick_buttons() -> tuple:
     return tuple(_Button(label=label, data=data) for label, data in QUICK_ACTIONS)
 
 
+#: First-contact guide for brand-new senders (Telegram/email). Sent once,
+#: together with the first onboarding question — never again.
+FIRST_TIME_GUIDE = (
+    "👋 Welcome to CampusOps — your personal academic agent!\n\n"
+    "Here's what I can do for you:\n"
+    "📅 Classes — today, tomorrow, next class, whole week\n"
+    "⏰ Deadlines, exams & reminders (I can set them too)\n"
+    "📧 College email updates & room-change alerts\n"
+    "🙈 Hide things you don't want: 'hide OS', 'don't show Saturdays'\n\n"
+    "Tap a button below anytime, or try /help for all commands.\n"
+    "Let's get you set up — "
+)
+
+import re as _re
+
+
+def format_reply(text: str, limit: int = 3500) -> str:
+    """Tidy agent text for chat channels: collapse runaway blank lines,
+    trim trailing space, and cap length so long answers arrive whole
+    instead of cut off mid-sentence."""
+    tidy = _re.sub(r"\n{3,}", "\n\n", (text or "").strip())
+    if len(tidy) <= limit:
+        return tidy
+    cut = tidy[:limit].rsplit("\n", 1)[0]
+    return cut + "\n\n…(continued in the web chat → AI Chat)"
+
+
 def reply_text(thread: Thread, text: str) -> None:
     """Threaded reply to the message that opened this turn."""
-    thread.post(text)
+    thread.post(format_reply(text))
 
 
 def reply_with_actions(thread: Thread, text: str) -> None:
     """Reply + quick-action buttons (Telegram keyboards; harmless elsewhere)."""
     try:
-        thread.post(text, actions=quick_buttons())
+        thread.post(format_reply(text), actions=quick_buttons())
     except Exception:
-        thread.post(text)
+        thread.post(format_reply(text))
