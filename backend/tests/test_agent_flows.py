@@ -276,3 +276,20 @@ def test_exam_sweep_alert(db_session):
     body = db_session.query(_models.Notification).filter_by(
         student_id=student.id).one().body
     assert "OS" in body
+
+
+def test_short_answers_are_targeted(db_session):
+    student = make_student(db_session)
+    seed_timetable(db_session, student)
+    tg = lambda text: handle_turn(db_session, student, text, channel="caspian", now=NOW)
+    assert tg("hi") == "Hi Test! 👋 What do you need? Try a button below, /today, /next, /deadlines — or /help for everything."
+    assert tg("thanks!") == "Anytime! 👍 Good luck with classes today."
+    nxt = tg("what is my next class?")
+    assert "DBMS" in nxt and "Deadlines" not in nxt and "Exams" not in nxt
+    today = tg("what do I have today?")
+    assert "DBMS" in today and "Deadlines" not in today
+    week = tg("show me the week")
+    assert "Monday" in week or "Wednesday" in week
+    web = handle_turn(db_session, student, "what is my next class?",
+                      channel="web", now=NOW)
+    assert "DBMS" in web  # web keeps the fuller answer path

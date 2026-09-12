@@ -170,6 +170,55 @@ def _handle_visibility(db, student, text: str, subjects: list[str]) -> str | Non
     return None
 
 
+def _handle_chat_short(db, student, text: str, c, low: str, now) -> str | None:
+    """One question → one short answer (chat channels). Small talk gets a
+    one-liner; each schedule question returns ONLY that slice — never the
+    whole brief. Returns None when the turn needs the full pipeline."""
+    name = (student.full_name or "there").split()[0]
+    stripped = low.strip()
+
+    has = lambda *words: any(w in low for w in words)  # noqa: E731
+    if "remind me" in low or has("focus", "brief", "priorit", "do now",
+                                 "what next", "right now", "summary"):
+        return None  # richer flows own these (full plan / reminder creation)
+
+    if re.fullmatch(r"(hi+|hii+|hello+|hey+|yo|namaste|good morning|good evening|good afternoon)[.! ]*", stripped):
+        return (f"Hi {name}! 👋 What do you need? Try a button below, "
+                "/today, /next, /deadlines — or /help for everything.")
+    if re.fullmatch(r"(thanks?|thank you|thx|shukriya|dhanyavad)[.! ]*", stripped):
+        return "Anytime! 👍 Good luck with classes today."
+    if re.fullmatch(r"(bye|goodbye|see you|good night)[.! ]*", stripped):
+        return "Bye! 👋 Ping me anytime — I'll keep an eye on your deadlines."
+
+    if "next class" in low or re.search(r"\bnext\b.*\b(class|lecture)\b", low):
+        nxt = tools.get_next_class(c)
+        return (f"Next: {nxt['subject']} at {nxt['start']} (Room {nxt['room'] or '—'})."
+                if nxt else "No upcoming classes on your timetable. Enjoy! 🎉")
+    if has("tomorrow") and not has("today", "week", "deadline", "exam"):
+        return f"Tomorrow: {_fmt_classes(tools.get_tomorrow_schedule(c))}."
+    if has("today") and not has("tomorrow", "week", "deadline", "exam"):
+        return f"Today ({DAY_NAMES[now.weekday()]}): {_fmt_classes(tools.get_today_schedule(c))}."
+    if has("week") and not has("deadline", "exam"):
+        parts = [f"{day}: {_fmt_classes(tools.get_day_schedule(c, d))}"
+                 for d, day in enumerate(DAY_NAMES)
+                 if tools.get_day_schedule(c, d)]
+        return "Your week:\n" + "\n".join(parts) if parts else "Nothing scheduled this week. 🎉"
+    if has("deadline", "assignment", "due", "submission") and not has("exam"):
+        dl = tools.get_upcoming_deadlines(c, days=14)[:4]
+        if not dl:
+            return "No open deadlines. All clear! 🎉"
+        return "Deadlines:\n" + "\n".join(
+            f"• {d['title']} — due {d['due']}" for d in dl)
+    if "exam" in low and not has("deadline", "assignment"):
+        ex = tools.get_upcoming_exams(c)[:3]
+        if not ex:
+            return "No exams scheduled. 🎉"
+        return "Exams:\n" + "\n".join(
+            f"• {e['subject']} — {e['at'] or 'date TBA'}"
+            + (f" (Room {e['room']})" if e.get("room") else "") for e in ex)
+    return None
+
+
 def handle_turn(db: Session, student: models.Student, text: str,
                 channel: str = "caspian", now: datetime | None = None) -> str:
     now = now or utcnow()
@@ -215,6 +264,11 @@ def handle_turn(db: Session, student: models.Student, text: str,
     visibility_reply = _handle_visibility(db, student, text, _known_subjects(db, student.id))
     if visibility_reply is not None:
         return visibility_reply
+
+    if channel != "web":
+        short = _handle_chat_short(db, student, text, c, low, now)
+        if short is not None:
+            return short
 
     if wants["plan"] or not any(wants.values()):
         plan = tools.generate_daily_plan(c)
