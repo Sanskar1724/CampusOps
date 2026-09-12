@@ -4,7 +4,10 @@ export default function Landing() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-indigo-50 via-white to-slate-50">
       <header className="max-w-6xl mx-auto flex items-center justify-between p-6">
-        <div className="text-xl font-bold text-indigo-700">🎓 CampusOps</div>
+        <div className="text-xl font-bold text-indigo-700 flex items-center gap-2">
+          <img src="/logo.svg" alt="CampusOps logo" className="w-8 h-8" />
+          CampusOps
+        </div>
         <div className="flex items-center gap-3">
           <Link href="/login" className="btn-ghost">Sign in</Link>
           <Link href="/register" className="btn">Get started</Link>

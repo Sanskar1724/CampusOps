@@ -1,68 +1,83 @@
-# CampusOps — Personal Academic Agent for Students
+<p align="center">
+  <img src="frontend/public/logo.svg" width="72" alt="CampusOps logo" />
+</p>
 
-An AI agent that knows your academic life and proactively helps manage it —
-college email, timetable, and documents in; briefs, reminders, and answers out.
-**Caspian is the communication foundation**: one Core Agent serves Caspian
-messaging, web chat, and scheduled nudges.
+<h1 align="center">CampusOps</h1>
+<p align="center"><strong>Your personal academic agent</strong> — never miss a class, deadline, or room change again.</p>
 
-```text
-STUDENT ─▶ CASPIAN SDK ─▶ comms/ ─▶ Core Agent ─┬─ memory (Postgres/SQLite + embeddings)
-                                                ├─ tools (timetable, email, docs, tasks)
-                                                └─ LLM (OpenAI-compatible, offline fallback)
-        ◀── thread.post / gateway ── decision ──┘
-```
+<p align="center">
+  <img src="https://img.shields.io/badge/backend-FastAPI%20%C2%B7%20Python-009688" alt="backend" />
+  <img src="https://img.shields.io/badge/frontend-Next.js%2014-black" alt="frontend" />
+  <img src="https://img.shields.io/badge/comms-Caspian%20SDK-4F46E5" alt="comms" />
+  <img src="https://img.shields.io/badge/db-Postgres%20%C2%B7%20SQLite-336791" alt="db" />
+  <img src="https://img.shields.io/badge/tests-54%20passing-brightgreen" alt="tests" />
+</p>
 
-## Quickstart (local, no credentials needed)
+CampusOps reads your **college email, timetable, and documents** — then pings you
+with a morning brief, urgent alerts, and answers. One Core Agent brain serves
+**web chat, Telegram, and email** alike.
+
+<p align="center"><img src="docs/images/architecture.svg" width="720" alt="CampusOps architecture" /></p>
+
+## ✨ Highlights
+
+- 🎯 **"Do now" focus engine** — urgency-ranked deadlines + next class in one answer
+- 🗓️ **Your timetable, your rules** — batch-filtered views, PDF/photo scan, hide/mute/delete by chat
+- 📧 **Email intelligence** — Gmail sync, 10-kind classification, room-change radar
+- 📄 **Documents that answer back** — multiformat + vision OCR + hybrid search
+- 🔔 **Notifications with rules** — kinds, quiet hours, channel choice, honest statuses
+- 💬 **Telegram bot** — commands, quick-action buttons, first-time guide
+- 🔌 **Connection board** — every integration 🟢/🔴 with the fix, right in Settings
+
+Full tour: [`docs/FEATURES.md`](docs/FEATURES.md) · User manual: [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md)
+
+## 🚀 Quickstart
 
 ```powershell
 python -m scripts.init_db --seed
-python -m uvicorn backend.app.main:app --port 8000   # API + docs at /docs
-python -m backend.app.jobs.worker                     # briefs + reminders (separate shell)
-cd frontend; npm install; npm run dev                 # web UI on :3001
+python -m uvicorn backend.app.main:app --port 8000   # API + /docs
+python -m backend.app.jobs.worker                     # scheduler (another shell)
+cd frontend; npm install; npm run dev                 # web UI :3001
 ```
 
-Demo login: `demo.student@example.com` / `demo1234` (seeded timetable, emails,
-deadlines, room-change notice, document). Ports: API `:8000`, web `:3001`.
-Sign-in options: password or **Continue with Google** (needs the same Google
-OAuth client as Gmail sync, plus redirect URI
-`http://localhost:3001/auth/google/callback` in its authorized list).
+Sample login: `demo.student@example.com` / `demo1234` · Ports: API `:8000`, web `:3001`
 
-Live messaging needs `CASPIAN_API_KEY` + `CAMPUSOPS_MAILBOX` (see
-`.env.example`), then `python -m backend.app.comms.runner` and message the
-agent address. Without a key, everything else still works offline.
+Live channels need keys (`.env.example` documents all): `CASPIAN_API_KEY` +
+`CAMPUSOPS_MAILBOX` for email, `TELEGRAM_BOT_TOKEN` for the bot, Google OAuth
+client for Gmail + Google sign-in. Everything else works offline.
 
-## Layout
+## 📚 Docs
 
-- `backend/app/comms/` — Caspian adapter (client, handlers, proactive gateway
-  sends, runner). Only place that imports `caspian`.
-- `backend/app/agents/` — Core Agent (`core.handle_turn`), toolset (`tools`),
-  conversational onboarding.
-- `backend/app/ingestion/` — source interface + Gmail, PDF, timetable
-  pipelines; rule-based classify/extract with optional LLM enrichment.
-- `backend/app/memory/`, `models.py`, `db.py` — layered memory + schema
-  (SQLite locally, PostgreSQL via `DATABASE_URL`).
-- `backend/app/jobs/` — daily brief, deadline/reminder sweeps, delivery retry
-  + worker entrypoint.
-- `backend/app/api/` — auth (JWT), student, timetable, email, documents,
-  planner, notifications, chat, integrations. OpenAPI at `/docs`.
-- `frontend/` — Next.js 14 + Tailwind: landing, auth, onboarding, dashboard,
-  chat, timetable, email, documents, planner, notifications, profile, settings.
-- `scripts/` — `init_db`, `seed_demo` (labeled demo data).
+| Doc | Covers |
+|---|---|
+| [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) | End-user manual (also served in-app at Help) |
+| [`docs/BACKEND.md`](docs/BACKEND.md) | Service layout, DB/migrations, auth model |
+| [`docs/FRONTEND.md`](docs/FRONTEND.md) | Pages, conventions, build |
+| [`docs/API.md`](docs/API.md) | Every endpoint + auth |
+| [`docs/ERROR_HANDLING.md`](docs/ERROR_HANDLING.md) | Codes, limits, failure table |
+| [`docs/FEATURES.md`](docs/FEATURES.md) | Feature tour |
+| [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Docker, env checklist, Google/Telegram/Caspian setup |
+| [`docs/00-caspian-capability-map.md`](docs/00-caspian-capability-map.md) | Verified Caspian SDK capabilities |
+| [`docs/01-architecture.md`](docs/01-architecture.md) | Caspian-first architecture |
+| [`CONTRIBUTORS.md`](CONTRIBUTORS.md) | Contributors |
 
-## Verify
+## ✅ Verify
 
 ```powershell
-python -m pytest backend/tests/ -v   # 22 offline tests, zero network
+python -m pytest backend/tests/ -v   # 54 tests, offline-safe
 cd frontend; npx tsc --noEmit; npm run build
 ```
 
-## Production notes (honest limits)
+## 🔒 Production notes (honest limits)
 
-- Semantic recall uses portable hash embeddings + in-Python cosine search so
-  the demo runs anywhere; swap `embeddings.embed()` for a real model and move
-  `embedding_json` to a pgvector column for scale (compose already ships
-  `pgvector/pg16`).
-- Gmail uses read-only OAuth; refresh tokens live in `integrations` — put a
-  KMS/vault in front of the DB before real student data.
+- Semantic recall uses portable hash embeddings + in-Python cosine search so the
+  demo runs anywhere; swap `embeddings.embed()` for a real model and move
+  `embedding_json` to a pgvector column for scale (compose ships `pgvector/pg16`).
+- Gmail uses read-only OAuth with auto token refresh; refresh tokens live in
+  `integrations` — put a KMS/vault in front of the DB before real student data.
 - Set a long random `APP_SECRET_KEY`; never commit `.env`.
 - Moodle/WhatsApp are new `InformationSource` implementations, not core rewrites.
+
+## 👥 Contributors
+
+See [CONTRIBUTORS.md](CONTRIBUTORS.md).
