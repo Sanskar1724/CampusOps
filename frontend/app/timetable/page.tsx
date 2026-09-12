@@ -262,10 +262,19 @@ export default function Timetable() {
               }}
             />
             <div className="text-xs text-slate-500">Text PDFs read instantly; scans retry with vision OCR automatically.</div>
+            <div className="text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-lg p-2.5">
+              📝 <span className="font-semibold">Scan missed rows?</span> Open the PDF in ChatGPT (or any GPT tool) and ask
+              <span className="font-mono"> “extract all timetable text, one class per line”</span>, then paste the
+              result in <span className="font-semibold">“Paste timetable text”</span> below — it never needs OCR.
+            </div>
           </div>
 
           <div className="card space-y-2">
             <div className="font-semibold">✏️ Paste timetable text <span className="badge badge-ok ml-1">always works</span></div>
+            <div className="text-xs text-slate-500">
+              Best fallback: convert the PDF page to text with GPT first, then paste here.
+              One class per line works best, e.g. <span className="font-mono">Monday 09:00-10:00 DBMS Room 301</span>.
+            </div>
             <textarea
               className="input min-h-24"
               value={paste}

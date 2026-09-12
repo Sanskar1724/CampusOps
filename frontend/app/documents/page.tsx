@@ -3,8 +3,45 @@ import { useEffect, useState } from "react";
 import Shell from "@/components/Shell";
 import { api, upload } from "@/lib/api";
 
-function Facts({ facts }: { facts: any }) {
-  if (!facts || Object.keys(facts).length === 0)
+function PastedText({ onDone, onError }: { onDone: (name: string) => void; onError: (m: string) => void }) {
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  return (
+    <>
+      <textarea
+        className="input min-h-24"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder={"Paste the GPT-extracted text here…"}
+      />
+      <button
+        className="btn"
+        disabled={busy || !text.trim()}
+        onClick={async () => {
+          setBusy(true);
+          try {
+            const file = new File([text], `pasted-${new Date().toISOString().slice(0, 10)}.txt`, { type: "text/plain" });
+            await upload("/api/documents/upload", file);
+            setText("");
+            onDone(file.name);
+          } catch (err: any) {
+            try {
+              const d = JSON.parse(err.message);
+              onError(typeof d.detail === "string" ? d.detail : err.message);
+            } catch {
+              onError(err.message || "Upload failed.");
+            }
+          }
+          setBusy(false);
+        }}
+      >
+        {busy ? "Processing…" : "Process pasted text"}
+      </button>
+    </>
+  );
+}
+
+function Facts({ facts }: { facts: any }) {  if (!facts || Object.keys(facts).length === 0)
     return <span className="text-xs text-slate-400">no structured facts yet</span>;
   return (
     <span className="flex flex-wrap gap-1">
@@ -83,6 +120,15 @@ export default function Documents() {
               PDF, TXT, CSV, XLSX, DOCX, or photos. Scanned PDFs are re-read
               with vision OCR automatically. Facts appear below after upload.
             </div>
+          </div>
+          <div className="card space-y-2">
+            <div className="font-semibold">✏️ Paste converted text <span className="badge badge-ok ml-1">always works</span></div>
+            <div className="text-xs text-slate-500">
+              Not happy with a scan? Open the PDF in ChatGPT (or any GPT tool) and ask
+              <span className="font-mono"> “extract all text exactly, keep tables line by line”</span>,
+              then paste the result here — no OCR needed.
+            </div>
+            <PastedText onDone={(name) => { setMsg(`✅ ${name} processed.`); refresh(); }} onError={setMsg} />
           </div>
           <div className="card">
             <div className="font-semibold mb-2">📂 Your documents + extracted info</div>
