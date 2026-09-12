@@ -15,7 +15,7 @@ services:
 
     buildCommand: pip install -r backend/requirements.txt
 
-    startCommand: sh -c "python -m scripts.init_db --seed && python -m uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT"
+    startCommand: sh -c "python -m scripts.init_db --seed && TELEGRAM_SELF_HOST=1 python -m backend.app.comms.runner & python -m uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT"
 
     envVars:
       - key: DATABASE_URL
