@@ -252,7 +252,8 @@ def test_telegram_commands_and_buttons(db_session):
     assert expand_command("plain text") == "plain text"
     assert expand_command("/unknowncmd") == "/unknowncmd"
     buttons = quick_buttons()
-    assert len(buttons) == 7 and all(b.label and b.data.startswith("cmd:") for b in buttons)
+    assert len(buttons) == 4  # thumb-sized: 4 main features only
+    assert {b.data for b in buttons} == {"cmd:today", "cmd:next", "cmd:deadlines", "cmd:focus"}
     assert set(COMMAND_TEXT) >= {"today", "tomorrow", "next", "deadlines", "brief", "focus", "help"}
 
 

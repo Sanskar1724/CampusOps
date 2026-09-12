@@ -55,9 +55,12 @@ You talk to the SAME agent on the website, on Telegram, and over email.
 ## 6. Telegram — @Sankiyy_bot
 
 - Message the bot, answer onboarding once, then chat like on the website.
-- **Commands**: `/today` `/tomorrow` `/next` `/deadlines` `/exams`
-  `/brief` `/focus` `/help` — plus tappable quick-action buttons under
-  every reply.
+- **Commands** (type `/` to list them all): `/today` `/tomorrow` `/week`
+  `/next` `/deadlines` `/exams` `/reminders` `/brief` `/focus` `/help` —
+  plus 4 tappable buttons (Today, Next class, Deadlines, Focus) under
+  every reply. Answers are short and formatted for chat.
+- Class-start pings (🔔 ~15 min before) and exam alerts arrive automatically
+  when notifications are on.
 - Keep ONE bot runner at a time (two pollers steal each other's updates).
 
 ## 7. Notifications — your rules

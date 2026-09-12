@@ -219,6 +219,7 @@ def handle_turn(db: Session, student: models.Student, text: str,
     if wants["plan"] or not any(wants.values()):
         plan = tools.generate_daily_plan(c)
         focus = tools.get_focus_now(c)
+        compact = (channel != "web")  # Telegram/email: answer asked, not everything
         sections.append(f"Today ({DAY_NAMES[now.weekday()]}): {_fmt_classes(plan['today'])}.")
         sections.append(f"Next class: {plan['next_class']['subject']} "
                         f"{plan['next_class']['start']} Room {plan['next_class']['room'] or '—'}"
@@ -226,18 +227,19 @@ def handle_turn(db: Session, student: models.Student, text: str,
         dl = plan["deadlines"]
         if dl:
             ranked_lines = []
-            for d in dl[:5]:
+            for d in dl[:3 if compact else 5]:
                 _, label = tools.urgency_score(d, now)
                 ranked_lines.append(f"{d['title']} (due {d['due']}) [{label}]")
             sections.append("Deadlines (ranked): " + "; ".join(ranked_lines) + ".")
         else:
             sections.append("Deadlines: none open.")
-        ex = plan["exams"][:3]
+        ex = plan["exams"][:2 if compact else 3]
         sections.append("Exams: " + ("; ".join(
             f"{e['subject']} at {e['at']}" for e in ex) if ex else "none scheduled."))
-        imp = plan["important"][:3]
-        sections.append("Important: " + ("; ".join(
-            f"{i['title']} [{i['priority']}]" for i in imp) if imp else "nothing new."))
+        if not compact:
+            imp = plan["important"][:3]
+            sections.append("Important: " + ("; ".join(
+                f"{i['title']} [{i['priority']}]" for i in imp) if imp else "nothing new."))
         sections.append(f"🎯 Do now: {focus['do_now']}")
     else:
         if wants["schedule"]:
@@ -268,10 +270,12 @@ def handle_turn(db: Session, student: models.Student, text: str,
 
     profile = (f"Student: {student.full_name}, {student.department} Div-{student.division} "
                f"Batch-{student.batch}, Sem {student.semester}.")
-    uctx = get_user_context(db, student)
-    guide = [f"View: {uctx.batch_label}.", GUIDE_POINTER]
-    if uctx.hidden_subjects or uctx.hidden_days:
-        guide.append(f"{len(uctx.hidden_subjects)} subject(s) + {len(uctx.hidden_days)} day(s) "
-                     "hidden by student and excluded above (mention only if asked).")
-    context = profile + "\n" + "\n".join(sections) + "\n" + "\n".join(guide)
+    context = profile + "\n" + "\n".join(sections)
+    if channel == "web":
+        uctx = get_user_context(db, student)
+        guide = [f"View: {uctx.batch_label}.", GUIDE_POINTER]
+        if uctx.hidden_subjects or uctx.hidden_days:
+            guide.append(f"{len(uctx.hidden_subjects)} subject(s) + {len(uctx.hidden_days)} day(s) "
+                         "hidden by student and excluded above (mention only if asked).")
+        context += "\n" + "\n".join(guide)
     return get_llm().complete(SYSTEM_BASE, text, context=context)

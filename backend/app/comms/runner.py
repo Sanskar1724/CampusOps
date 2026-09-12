@@ -42,6 +42,9 @@ def main() -> None:
         if not token:
             raise SystemExit("Set TELEGRAM_BOT_TOKEN first (see .env.example).")
         _ensure_polling_mode(token)
+        from backend.app.comms.service import set_bot_menu
+        print("campusops: command menu:",
+              "published ✓ (type / to see all)" if set_bot_menu(token) else "publish failed — commands still work when typed")
         print("campusops: ONE runner only — a second poller steals the same updates.")
         cx = build_caspian_app(telegram_bot_token=token, telegram_via="self-host")
         print("campusops: polling Telegram — message your bot (see @Sankiyy_bot)")
@@ -59,6 +62,9 @@ def main() -> None:
     if os.environ.get("TELEGRAM_BOT_TOKEN"):
         print("campusops: NOTE — hosted Telegram claims the bot webhook; do NOT run "
               "a TELEGRAM_SELF_HOST poller at the same time (only one consumer gets updates).")
+        from backend.app.comms.service import set_bot_menu
+        if set_bot_menu(os.environ["TELEGRAM_BOT_TOKEN"]):
+            print("campusops: Telegram / command menu published ✓")
     cx.run()
 
 

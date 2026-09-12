@@ -97,11 +97,34 @@ def test_first_time_sender_gets_guide_once(db_session):
 
 
 def test_reply_formatting_and_buttons():
-    from backend.app.comms.service import format_reply, quick_buttons
+    from backend.app.comms.service import format_reply, quick_buttons, strip_markdown
     assert format_reply("a\n\n\n\nb") == "a\n\nb"
+    assert strip_markdown("**DBMS** at `09:00` __Room__") == "DBMS at 09:00 Room"
     long_text = "x\n" * 5000
     assert len(format_reply(long_text)) < len(long_text)
     assert "continued" in format_reply(long_text)
     buttons = quick_buttons()
-    assert len(buttons) == 7
-    assert {b.data for b in buttons} >= {"cmd:today", "cmd:week", "cmd:reminders", "cmd:help"}
+    assert len(buttons) == 4  # thumb-sized: 4 main features only
+    assert {b.data for b in buttons} == {"cmd:today", "cmd:next", "cmd:deadlines", "cmd:focus"}
+
+
+def test_bot_menu_shape(monkeypatch):
+    import httpx
+    from backend.app.comms import service as svc
+    seen = {}
+
+    class FakeResp:
+        def json(self):
+            return {"ok": True, "result": True}
+
+    def fake_post(url, **kwargs):
+        seen["url"] = url
+        seen["commands"] = kwargs["json"]["commands"]
+        return FakeResp()
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    assert svc.set_bot_menu("TOKEN123") is True
+    assert "botTOKEN123/setMyCommands" in seen["url"]
+    assert {c["command"] for c in seen["commands"]} >= {
+        "today", "tomorrow", "week", "next", "deadlines", "exams",
+        "reminders", "brief", "focus", "help"}

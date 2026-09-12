@@ -124,8 +124,12 @@ def test_delete_class_from_chat(db_session):
 
 def test_guide_pointer_in_context(db_session):
     student = make_student(db_session)
-    reply = handle_turn(db_session, student, "What should I focus on today?", now=NOW)
+    reply = handle_turn(db_session, student, "What should I focus on today?",
+                        channel="web", now=NOW)
     assert "APP GUIDE" in reply  # DevLLM echoes retrieved context verbatim
+    tg = handle_turn(db_session, student, "What should I focus on today?",
+                     channel="caspian", now=NOW)
+    assert "APP GUIDE" not in tg  # Telegram stays compact
 
 
 def test_student_isolation(db_session):
@@ -230,3 +234,45 @@ def test_semantic_memory_search(db_session):
     add_chunk(db_session, doc, 1, "Cricket club meeting on Sunday evening")
     hits = semantic_search(db_session, student.id, "DBMS exam preparation")
     assert hits and hits[0]["text"].startswith("DBMS")
+
+
+def test_telegram_compact_mode(db_session):
+    student = make_student(db_session)
+    seed_timetable(db_session, student)
+    full = handle_turn(db_session, student, "What should I focus on today?",
+                       channel="web", now=NOW)
+    compact = handle_turn(db_session, student, "What should I focus on today?",
+                          channel="caspian", now=NOW)
+    assert len(compact) <= len(full)
+    assert "APP GUIDE" not in compact
+
+
+def test_class_soon_sweep_fires_once(db_session):
+    from datetime import timedelta
+    from backend.app import models as _models
+    from backend.app.jobs import run_class_soon_sweep
+    student = make_student(db_session)
+    start = (NOW + timedelta(minutes=10)).strftime("%H:%M")
+    replace_timetable(db_session, student.id, [
+        {"day": "Wednesday", "subject": "DBMS", "start_time": start,
+         "end_time": "10:00", "room": "301"}], source="test")
+    assert run_class_soon_sweep(db_session, NOW) == 1
+    assert run_class_soon_sweep(db_session, NOW) == 0  # marker dedupe
+    assert db_session.query(_models.Notification).filter_by(
+        student_id=student.id).count() == 1
+
+
+def test_exam_sweep_alert(db_session):
+    from datetime import timedelta
+    from backend.app import models as _models
+    from backend.app.jobs import run_exam_sweep
+    student = make_student(db_session)
+    db_session.add(_models.Exam(
+        student_id=student.id, subject="OS", title="Mid-sem",
+        exam_at=NOW + timedelta(hours=20), room="H1", source="test"))
+    db_session.commit()
+    assert run_exam_sweep(db_session, NOW) == 1
+    assert run_exam_sweep(db_session, NOW) == 0
+    body = db_session.query(_models.Notification).filter_by(
+        student_id=student.id).one().body
+    assert "OS" in body
