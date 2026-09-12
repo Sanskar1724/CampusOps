@@ -48,8 +48,8 @@ Frontend on Vercel, backend + worker + Postgres on Render — full click-by-clic
 guide: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md). After deploying, put the URLs
 here:
 
-- **Live app:** _TODO: paste Vercel URL_
-- **API docs:** _TODO: paste Render API `/docs` URL_
+- **Live app:** https://campus-ops-chi.vercel.app/
+- **API docs:** https://campusops-api-dcy9.onrender.com/docs
 
 Live channels need keys (`.env.example` documents all): `CASPIAN_API_KEY` +
 `CAMPUSOPS_MAILBOX` for email, `TELEGRAM_BOT_TOKEN` for the bot, Google OAuth
