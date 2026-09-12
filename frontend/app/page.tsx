@@ -175,8 +175,8 @@ export default function Landing() {
           <div>
             <div className="font-semibold mb-2">Team</div>
             <ul className="space-y-1.5 text-slate-600">
-              <li><a className="text-indigo-600 font-medium hover:underline" href="https://github.com/Sanskar1724" target="_blank" rel="noopener noreferrer">Sanskar1724</a></li>
-              <li><a className="text-indigo-600 font-medium hover:underline" href="https://github.com/Pratiksha2968" target="_blank" rel="noopener noreferrer">Pratiksha2968</a></li>
+              <li><a className="text-indigo-600 font-medium hover:underline" href="https://github.com/Sanskar1724" target="_blank" rel="noopener noreferrer">Sanskar</a></li>
+              <li><a className="text-indigo-600 font-medium hover:underline" href="https://github.com/Pratiksha2968" target="_blank" rel="noopener noreferrer">Pratiksha</a></li>
               <li><a className="text-indigo-600 hover:underline" href={`${REPO}/blob/master/CONTRIBUTORS.md`} target="_blank" rel="noopener noreferrer">All contributors →</a></li>
             </ul>
           </div>

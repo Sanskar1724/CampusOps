@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/frontend-Next.js%2014-black" alt="frontend" />
   <img src="https://img.shields.io/badge/comms-Caspian%20SDK-4F46E5" alt="comms" />
   <img src="https://img.shields.io/badge/db-Postgres%20%C2%B7%20SQLite-336791" alt="db" />
-  <img src="https://img.shields.io/badge/tests-54%20passing-brightgreen" alt="tests" />
+  <img src="https://img.shields.io/badge/tests-62%20passing-brightgreen" alt="tests" />
 </p>
 
 CampusOps reads your **college email, timetable, and documents** — then pings you
@@ -76,7 +76,7 @@ Design: [`docs/AGENT.md`](docs/AGENT.md).
 ## ✅ Verify
 
 ```powershell
-python -m pytest backend/tests/ -v   # 54 tests, offline-safe
+python -m pytest backend/tests/ -v   # 62 tests, offline-safe
 cd frontend; npx tsc --noEmit; npm run build
 ```
 
@@ -90,6 +90,23 @@ cd frontend; npx tsc --noEmit; npm run build
 - Set a long random `APP_SECRET_KEY`; never commit `.env`.
 - Moodle/WhatsApp are new `InformationSource` implementations, not core rewrites.
 
-## 👥 Contributors
+## ✈️ Telegram flagship
 
-See [CONTRIBUTORS.md](CONTRIBUTORS.md).
+The fastest way to feel CampusOps: message **[@Sankiyy_bot](https://t.me/Sankiyy_bot)**.
+First contact gets a guided tour + onboarding in chat; then:
+
+- ⌨️ **10 slash commands** — type `/` for today, tomorrow, week, next, deadlines,
+  exams, reminders, brief, focus, help
+- 👆 **4 tap buttons** under every reply (Today · Next · Deadlines · Focus)
+- 💬 **Short personal answers** voiced live from your user card + history
+- 🔔 **Proactive pings** — class-start (~15 min), deadline, exam, and room-change alerts
+
+One runner only: `TELEGRAM_SELF_HOST=1 python -m backend.app.comms.runner`
+(the runner clears webhooks and publishes the `/` menu on start).
+
+## 👥 Team
+
+- **Sanskar** — owner · [GitHub](https://github.com/Sanskar1724)
+- **Pratiksha** — contributor · [GitHub](https://github.com/Pratiksha2968)
+
+Full credits: [CONTRIBUTORS.md](CONTRIBUTORS.md).
