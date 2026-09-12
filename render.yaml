@@ -55,3 +55,6 @@ services:
 
       - key: FRONTEND_URLS
         sync: false
+
+      - key: PYTHON_VERSION
+        value: 3.13.4
