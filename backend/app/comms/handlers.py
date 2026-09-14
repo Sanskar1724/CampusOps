@@ -256,18 +256,18 @@ def register(cx: Caspian) -> Caspian:
                                 owner.telegram_chat_id = chat_id
                             # Remember link time
                             from backend.app.api.deps import set_pref
-                            import json as _json2
-                            set_pref(db, owner.id, "telegram_linked_at", _utcnow().isoformat() if ' _utcnow' not in locals() else __import__('backend.app.models', fromlist=['utcnow']).utcnow().isoformat())
-                            # Delete Telegram placeholder
-                            placeholder_id = student.id
+                            from backend.app.models import utcnow as _utcnow2
+                            set_pref(db, owner.id, "telegram_linked_at", _utcnow2().isoformat())
+                            # Delete Telegram placeholder and reassign conversation
+                            conv.student_id = owner.id
                             db.delete(student)
                             db.commit()
                             reply = (
-                                f"✅ Linked! Your Telegram is now connected to *{owner.full_name}* ({owner.college_email}).\n"
+                                f"✅ Linked! Your Telegram is now connected to {owner.full_name} ({owner.college_email}).\n"
                                 f"Your timetable, deadlines & docs are synced — web and Telegram share the same data. "
                                 f"Try /today or 'What is my next class?'"
                             )
-                            # Switch student reference for logging
+                            # Switch student reference for any further use
                             student = owner
                     from backend.app.comms.service import FIRST_TIME_GUIDE
                     if known is None and str(channel) != "web":

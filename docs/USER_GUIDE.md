@@ -56,12 +56,13 @@ You talk to the SAME agent on the website, on Telegram, and over email.
 
 - Message the bot, answer onboarding once, then chat like on the website.
 - **Commands** (type `/` to list them all): `/today` `/tomorrow` `/week`
-  `/next` `/deadlines` `/exams` `/reminders` `/brief` `/focus` `/help` —
+  `/next` `/deadlines` `/exams` `/reminders` `/brief` `/focus` `/link` `/help` —
   plus 4 tappable buttons (Today, Next class, Deadlines, Focus) under
-  every reply. Answers are short and formatted for chat.
+  every reply. Answers are short and formatted for chat. You can also send **PDFs/images** directly — they’re ingested like on the website.
+- **Link your web account:** Web → Profile → **Generate Telegram link code** (6 digits, 10 min) → Telegram: `/link 123456`. After that, web and Telegram share one account (same college email) — no more “already registered” errors, data is retained forever.
 - Class-start pings (🔔 ~15 min before) and exam alerts arrive automatically
   when notifications are on.
-- Keep ONE bot runner at a time (two pollers steal each other's updates).
+- Keep ONE bot runner at a time (two pollers steal each other's updates). If the bot is silent, ensure one `TELEGRAM_SELF_HOST=1` runner and that you’ve linked via `/link`.
 
 ## 7. Notifications — your rules
 
@@ -70,8 +71,15 @@ You talk to the SAME agent on the website, on Telegram, and over email.
   (e.g. 22:00–07:00) and delivery channel (auto / gateway / Telegram).
 - The worker sends the **morning brief**, **due-soon deadline** alerts,
   and due **reminders**. Missed quiet-hour items retry later — nothing spams.
+- **Telegram notifications** are strongest: after linking, all alerts respect your quiet hours and channel choice, with Telegram Bot API fallback when the gateway is blocked.
 
-## 8. Privacy in one paragraph
+## 8. Data retention — never lose your work
+
+- Everything is tied to your **college email** (lowercased) — not your device or Telegram handle. Log out, switch browser, or return after months: log in with the same email and your timetable, deadlines, docs & preferences are back.
+- **Web ↔ Telegram sync:** Same email = same account. If Telegram onboarding says “already registered”, use the link flow above — it merges the Telegram placeholder into your web account and data is retained.
+- **Restart commands:** `python -m uvicorn backend.app.main:app --port 8000` (API), `cd frontend; npm run dev` (web :3001), `TELEGRAM_SELF_HOST=1 python -m backend.app.comms.runner` (bot, one only), `python -m backend.app.jobs.worker` (scheduler). On Render/Vercel, use Manual Deploy → Deploy latest commit.
+
+## 9. Privacy in one paragraph
 
 - Your PRN, email, and academic data are visible only to you — every screen
   and every agent answer is filtered to your account.
@@ -79,10 +87,11 @@ You talk to the SAME agent on the website, on Telegram, and over email.
   password). Email/PDF text is treated as untrusted data, never as
   instructions.
 
-## 9. When something looks wrong
+## 10. When something looks wrong
 
 - **Settings → Backend connections** shows every integration 🟢/🔴 with the fix.
 - Timetable looks off? Check **Show all divisions** — your Div/Batch in
-  **Profile** decides your filter.
-- Bot silent on Telegram? Make sure exactly one runner polls, and use
-  `TELEGRAM_SELF_HOST=1` where the Caspian gateway is blocked.
+  **Profile** decides your filter. Dashboard also has a “Take it to Telegram” card after you add data.
+- Bot silent on Telegram? Make sure exactly one runner polls, you’ve linked via `/link`, and check Help → Quick restart commands.
+- Code says “some problem on my side”? Generate a fresh code on the web (valid 10 min) and retry `/link` — old codes are single-use.
+- Gmail 401? The app auto-refreshes; if revoked, reconnect in Settings.

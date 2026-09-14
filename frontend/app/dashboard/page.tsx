@@ -171,6 +171,21 @@ export default function Dashboard() {
               </div>
               <div className="mt-3 text-xs text-slate-500">Judge tip: try “Did my timetable change?” — room 301→405 detection is the wow moment.</div>
             </div>
+            {(timetable.length > 0 || openDeadlines.length > 0) && (
+              <div className="card border-sky-200 bg-gradient-to-r from-sky-50 to-indigo-50">
+                <div className="font-semibold mb-1">📱 Take it to Telegram</div>
+                <div className="text-sm text-slate-600 mb-3">
+                  Your timetable {timetable.length > 0 ? `(${timetable.length} classes)` : ""} and deadlines are ready — continue on your phone.
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <a href="https://t.me/Sankiyy_bot" target="_blank" rel="noopener noreferrer" className="btn bg-[#229ED9] hover:bg-[#1d8cc0] text-white">
+                    Open @Sankiyy_bot
+                  </a>
+                  <Link href="/profile" className="btn-ghost">🔗 Link Telegram in Profile</Link>
+                </div>
+                <div className="mt-2 text-xs text-slate-500">After linking with <span className="font-mono">/link CODE</span>, Telegram and web share the same data — data is retained forever via your college email.</div>
+              </div>
+            )}
             <div className="card">
               <div className="font-semibold mb-2">💡 Try asking</div>
               <div className="grid gap-2">
