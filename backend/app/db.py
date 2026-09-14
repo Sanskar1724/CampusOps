@@ -22,6 +22,13 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
 def init_db() -> None:
+    if not DATABASE_URL.startswith("sqlite"):
+        try:
+            with engine.begin() as conn:
+                from sqlalchemy import text as _text
+                conn.execute(_text("CREATE EXTENSION IF NOT EXISTS vector"))
+        except Exception:
+            pass  # SQLite or pgvector not available — fallback embeddings still work
     Base.metadata.create_all(bind=engine)
     ensure_columns()
 

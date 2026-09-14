@@ -15,7 +15,9 @@ services:
 
     buildCommand: pip install -r backend/requirements.txt
 
-    startCommand: sh -c "python -m scripts.init_db --seed && TELEGRAM_SELF_HOST=1 python -m backend.app.comms.runner & python -m uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT"
+    # FREE TIER: single web service runs API + worker + Telegram poller as background jobs.
+    # Separate worker/telegram services would require paid plan — so we keep them together.
+    startCommand: sh -c "python -m scripts.init_db && (python -m backend.app.jobs.worker & TELEGRAM_SELF_HOST=1 python -m backend.app.comms.runner & python -m uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT)"
 
     envVars:
       - key: DATABASE_URL
@@ -51,6 +53,9 @@ services:
         sync: false
 
       - key: GMAIL_CLIENT_SECRET
+        sync: false
+
+      - key: GMAIL_REDIRECT_URI
         sync: false
 
       - key: FRONTEND_URLS

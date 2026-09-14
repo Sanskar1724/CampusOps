@@ -95,11 +95,36 @@ def advance(db: Session, student: models.Student, text: str) -> str | None:
     elif step == "college_email":
         if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", value):
             return "That doesn't look like an email address. Please resend your college email."
+        # Case-insensitive email check for linking Telegram ↔ Web
         taken = db.scalar(select(models.Student).where(
-            models.Student.college_email == value, models.Student.id != student.id))
+            models.Student.college_email.ilike(value),
+            models.Student.id != student.id))
         if taken:
-            return "That email is already registered. Please resend your college email."
-        student.college_email = value
+            # If current is a pending Telegram placeholder and taken is a real web account,
+            # link Telegram identity to the existing account instead of erroring.
+            is_placeholder = student.prn.startswith("pending:") or student.onboarding_status != "done"
+            is_taken_real = not taken.prn.startswith("pending:") and taken.college_email != f"pending:{taken.caspian_sender or ''}"
+            if is_placeholder and is_taken_real:
+                # Merge: keep the real account, attach Telegram identifiers
+                taken.caspian_sender = student.caspian_sender or taken.caspian_sender
+                taken.caspian_thread_id = student.caspian_thread_id or taken.caspian_thread_id
+                if getattr(student, "telegram_chat_id", None):
+                    taken.telegram_chat_id = student.telegram_chat_id
+                # Preserve web profile data, just ensure email normalized
+                taken.college_email = taken.college_email  # keep original casing
+                # Delete placeholder
+                placeholder_id = student.id
+                db.delete(student)
+                # Copy any draft progress?
+                db.commit()
+                # Return success as linked account (caller will use taken on next message)
+                return (
+                    f"✅ Linked your Telegram to existing account *{taken.full_name}* ({taken.college_email}). "
+                    f"Your data is now synced — web and Telegram share the same timetable, deadlines & docs. "
+                    f"Try: 'What is my next class?'"
+                )
+            return "That email is already registered. If it's yours, please log in on the web with that email instead, or use /link <code> on Telegram to connect accounts."
+        student.college_email = value.lower().strip() if "@" in value else value
     elif step in dict(STEPS):
         setattr(student, step, value)
     draft[step] = value

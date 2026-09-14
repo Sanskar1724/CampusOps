@@ -1,4 +1,4 @@
-﻿"""Layered memory access. Structured tables are authoritative; chunks give
+"""Layered memory access. Structured tables are authoritative; chunks give
 semantic recall. Everything is student-scoped at the query level."""
 
 from __future__ import annotations

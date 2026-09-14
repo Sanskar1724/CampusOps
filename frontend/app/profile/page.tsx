@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { useEffect, useState } from "react";
 import Shell from "@/components/Shell";
 import { api } from "@/lib/api";
@@ -7,6 +7,8 @@ export default function Profile() {
   const [me, setMe] = useState<any>(null);
   const [form, setForm] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState("");
+  const [linkCode, setLinkCode] = useState<string | null>(null);
+  const [linkExpiry, setLinkExpiry] = useState<string | null>(null);
 
   useEffect(() => {
     api<any>("/api/auth/me").then((m) => {
@@ -81,6 +83,37 @@ export default function Profile() {
             visible only to you.
           </div>
         </form>
+      )}
+      {me && (
+        <div className="card max-w-lg mt-4 space-y-3">
+          <div className="font-semibold">🔗 Link Telegram</div>
+          <div className="text-xs text-slate-500">
+            Connect this web account to Telegram so both share the same timetable, deadlines & docs.
+            Generate a code, then send <span className="font-mono">/link 123456</span> to @Sankiyy_bot.
+          </div>
+          <button
+            className="btn-ghost"
+            onClick={async () => {
+              setMsg("");
+              try {
+                const r = await api<any>("/api/student/telegram-link-code", { method: "POST" });
+                setLinkCode(r.code);
+                setLinkExpiry(r.expires_at);
+                setMsg(`Code ${r.code} — valid 10 min. Send /link ${r.code} to @Sankiyy_bot.`);
+              } catch (err: any) {
+                setMsg(err.message);
+              }
+            }}
+          >
+            Generate Telegram link code
+          </button>
+          {linkCode && (
+            <div className="text-center p-3 bg-indigo-50 rounded-lg border border-indigo-200">
+              <div className="text-2xl font-mono font-bold tracking-widest">{linkCode}</div>
+              <div className="text-xs text-slate-500">Expires {linkExpiry ? new Date(linkExpiry).toLocaleTimeString() : ""} — send /link {linkCode} to @Sankiyy_bot</div>
+            </div>
+          )}
+        </div>
       )}
     </Shell>
   );

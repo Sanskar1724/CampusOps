@@ -109,6 +109,21 @@ def put_preferences(payload: dict, db: Session = Depends(get_db),
     return {"updated": updated}
 
 
+@student_router.post("/telegram-link-code")
+def telegram_link_code(db: Session = Depends(get_db),
+                       student: models.Student = Depends(Me)):
+    """Generate a 6-digit code for Telegram linking. Send /link <code> to the bot.
+    Code expires in 10 minutes and is single-use. Data stays synced via email otherwise."""
+    import secrets as _secrets
+    from datetime import timedelta as _td
+    code = f"{_secrets.randbelow(1000000):06d}"
+    expires = utcnow() + _td(minutes=10)
+    from backend.app.api.deps import set_pref  # noqa: E402
+    set_pref(db, student.id, "telegram_link_code",
+             {"code": code, "expires_at": expires.isoformat()})
+    return {"code": code, "expires_at": expires.isoformat(), "bot": "@Sankiyy_bot"}
+
+
 # ---------- timetable ----------
 
 tt_router = APIRouter(prefix="/api/timetable", tags=["timetable"])

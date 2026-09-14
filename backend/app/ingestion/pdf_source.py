@@ -1,9 +1,9 @@
-﻿"""Document pipeline: validate â†’ extract text (any format) â†’ chunk â†’ embed â†’
-extract facts â†’ memory.
+"""Document pipeline: validate → extract text (any format) → chunk → embed →
+extract facts → memory.
 
-Two realities of college PDFs: (1) digital PDFs have a text layer â€” parsed
+Two realities of college PDFs: (1) digital PDFs have a text layer — parsed
 directly, layout mode first; (2) scanned/photo PDFs have image pages with a
-broken or missing text layer â€” detected by `is_garbage_text` and re-read with
+broken or missing text layer — detected by `is_garbage_text` and re-read with
 vision OCR (page raster + OpenRouter vision model, cached per upload).
 PDF text is untrusted data: only facts/summaries are stored, and nothing
 inside a document can change agent behavior."""
@@ -58,7 +58,7 @@ def _layout_text(data: bytes) -> str:
 
 
 def _vision_ocr_png(png: bytes) -> str:
-    """One page image â†’ transcribed text via a free vision model."""
+    """One page image → transcribed text via a free vision model."""
     api_key = os.environ.get("OPENAI_API_KEY", "")
     if not api_key:
         raise ValueError("Vision OCR needs OPENAI_API_KEY (OpenRouter).")

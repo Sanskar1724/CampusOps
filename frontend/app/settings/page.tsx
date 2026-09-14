@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { useEffect, useState } from "react";
 import Shell from "@/components/Shell";
 import { api } from "@/lib/api";
@@ -22,19 +22,19 @@ export default function Settings() {
     <Shell>
       <h1 className="text-2xl font-bold mb-4">⚙️ Settings</h1>
       <div className="card max-w-lg mb-4">
-        <div className="font-semibold mb-2">ðŸ”Œ Backend connections</div>
-        {!sys && <div className="text-sm text-slate-500">Checkingâ€¦</div>}
+        <div className="font-semibold mb-2">🔌 Backend connections</div>
+        {!sys && <div className="text-sm text-slate-500">Checking…</div>}
         {sys && (
           <div className="space-y-1.5">
             <div className={`text-sm font-medium ${sys.all_ok ? "text-emerald-700" : "text-amber-700"}`}>
-              {sys.all_ok ? "âœ“ Everything connected" : "âš  Something needs attention"}
+              {sys.all_ok ? "✓ Everything connected" : "⚠ Something needs attention"}
             </div>
             {sys.checks.map((c: any) => (
               <div key={c.name} className="text-sm flex items-start gap-2">
-                <span>{c.ok ? "ðŸŸ¢" : "ðŸ”´"}</span>
+                <span>{c.ok ? "🟢" : "🔴"}</span>
                 <span>
                   <span className="font-mono text-xs">{c.name}</span>
-                  {c.detail && <span className="text-slate-500"> Â· {c.detail}</span>}
+                  {c.detail && <span className="text-slate-500"> · {c.detail}</span>}
                   {!c.ok && c.hint && <span className="block text-xs text-slate-600">{c.hint}</span>}
                 </span>
               </div>

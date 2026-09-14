@@ -31,6 +31,7 @@ BOT_COMMANDS: tuple[tuple[str, str], ...] = (
     ("reminders", "My reminders"),
     ("brief", "Daily brief"),
     ("focus", "What to focus on now"),
+    ("link", "Link Telegram to web account"),
     ("help", "What can you do?"),
 )
 #: /commands (Telegram + anywhere) mapped to plain agent questions.

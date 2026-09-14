@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { useEffect, useState } from "react";
 import Shell from "@/components/Shell";
 import { api } from "@/lib/api";
@@ -48,7 +48,7 @@ export default function Planner() {  const [deadlines, setDeadlines] = useState<
                 <span>
                   {d.title}{" "}
                   <span className={`text-xs rounded px-2 py-0.5 ${cls}`}>{label}</span>
-                  <span className="text-xs text-slate-500 block">{d.due_at || "no date"} Â· {d.source}</span>
+                  <span className="text-xs text-slate-500 block">{d.due_at || "no date"} · {d.source}</span>
                 </span>
                 <button
                   className="text-indigo-600 text-xs"
@@ -57,20 +57,20 @@ export default function Planner() {  const [deadlines, setDeadlines] = useState<
                     refresh();
                   }}
                 >
-                  done âœ“
+                  done ✓
                 </button>
               </div>
             );
           })}
           {deadlines.filter((d) => d.status === "open").length === 0 && (
-            <div className="text-sm text-slate-500">ðŸŽ‰ All clear â€” nothing due.</div>
+            <div className="text-sm text-slate-500">🎉 All clear — nothing due.</div>
           )}
         </div>
         <div className="card">
           <div className="font-semibold mb-2">Exams</div>
           {exams.map((e) => (
             <div key={e.id} className="text-sm py-1">
-              {e.subject} â€” {e.title} <span className="text-xs text-slate-500">({e.exam_at || "TBA"} {e.room})</span>
+              {e.subject} — {e.title} <span className="text-xs text-slate-500">({e.exam_at || "TBA"} {e.room})</span>
             </div>
           ))}
           {exams.length === 0 && <div className="text-sm text-slate-500">None scheduled.</div>}
@@ -87,7 +87,7 @@ export default function Planner() {  const [deadlines, setDeadlines] = useState<
               refresh();
             }}
           >
-            <input className="input" value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} placeholder="New taskâ€¦" />
+            <input className="input" value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} placeholder="New task…" />
             <button className="btn">Add</button>
           </form>
           {tasks.filter((t) => t.status === "open").map((t) => (
@@ -120,13 +120,13 @@ export default function Planner() {  const [deadlines, setDeadlines] = useState<
               refresh();
             }}
           >
-            <input className="input" value={remText} onChange={(e) => setRemText(e.target.value)} placeholder="Remind meâ€¦" required />
+            <input className="input" value={remText} onChange={(e) => setRemText(e.target.value)} placeholder="Remind me…" required />
             <input className="input" type="datetime-local" value={remAt} onChange={(e) => setRemAt(e.target.value)} required />
             <button className="btn">Add</button>
           </form>
           {reminders.map((r) => (
             <div key={r.id} className="text-sm py-1">
-              {r.text} <span className="text-xs text-slate-500">({r.remind_at} Â· {r.status})</span>
+              {r.text} <span className="text-xs text-slate-500">({r.remind_at} · {r.status})</span>
             </div>
           ))}
         </div>
