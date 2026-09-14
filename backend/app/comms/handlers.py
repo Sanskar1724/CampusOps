@@ -248,17 +248,21 @@ def register(cx: Caspian) -> Caspian:
                             reply = "✅ This Telegram is already linked to your account."
                         else:
                             # Merge: keep web account as primary, attach Telegram identity
-                            owner.caspian_sender = student.caspian_sender or owner.caspian_sender
-                            owner.caspian_thread_id = student.caspian_thread_id or owner.caspian_thread_id
-                            if getattr(student, "telegram_chat_id", None):
-                                owner.telegram_chat_id = student.telegram_chat_id
-                            elif chat_id:
-                                owner.telegram_chat_id = chat_id
-                            # Remember link time
+                            # Clear placeholder's unique key first to avoid UNIQUE constraint
+                            _link_sender = student.caspian_sender
+                            _link_thread = student.caspian_thread_id
+                            _link_chat = getattr(student, "telegram_chat_id", None) or chat_id
+                            student.caspian_sender = None  # type: ignore
+                            db.flush()
+                            owner.caspian_sender = _link_sender or owner.caspian_sender
+                            owner.caspian_thread_id = _link_thread or owner.caspian_thread_id
+                            if _link_chat:
+                                owner.telegram_chat_id = _link_chat
+                            # Remember link time (before deleting placeholder to keep session clean)
                             from backend.app.api.deps import set_pref
                             from backend.app.models import utcnow as _utcnow2
                             set_pref(db, owner.id, "telegram_linked_at", _utcnow2().isoformat())
-                            # Delete Telegram placeholder and reassign conversation
+                            # Reassign conversation and delete placeholder
                             conv.student_id = owner.id
                             db.delete(student)
                             db.commit()

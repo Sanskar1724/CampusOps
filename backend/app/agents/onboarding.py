@@ -106,20 +106,22 @@ def advance(db: Session, student: models.Student, text: str) -> str | None:
             is_taken_real = not taken.prn.startswith("pending:") and taken.college_email != f"pending:{taken.caspian_sender or ''}"
             if is_placeholder and is_taken_real:
                 # Merge: keep the real account, attach Telegram identifiers
-                taken.caspian_sender = student.caspian_sender or taken.caspian_sender
-                taken.caspian_thread_id = student.caspian_thread_id or taken.caspian_thread_id
-                if getattr(student, "telegram_chat_id", None):
-                    taken.telegram_chat_id = student.telegram_chat_id
-                # Preserve web profile data, just ensure email normalized
-                taken.college_email = taken.college_email  # keep original casing
-                # Delete placeholder
-                placeholder_id = student.id
+                # Must clear placeholder's unique sender first to avoid UNIQUE constraint on flush
+                _tg_sender = student.caspian_sender
+                _tg_thread = student.caspian_thread_id
+                _tg_chat = getattr(student, "telegram_chat_id", None)
+                student.caspian_sender = None  # type: ignore
+                db.flush()
+                taken.caspian_sender = _tg_sender or taken.caspian_sender
+                taken.caspian_thread_id = _tg_thread or taken.caspian_thread_id
+                if _tg_chat:
+                    taken.telegram_chat_id = _tg_chat
+                # Delete placeholder after detaching its unique key
                 db.delete(student)
-                # Copy any draft progress?
                 db.commit()
                 # Return success as linked account (caller will use taken on next message)
                 return (
-                    f"✅ Linked your Telegram to existing account *{taken.full_name}* ({taken.college_email}). "
+                    f"✅ Linked your Telegram to existing account {taken.full_name} ({taken.college_email}). "
                     f"Your data is now synced — web and Telegram share the same timetable, deadlines & docs. "
                     f"Try: 'What is my next class?'"
                 )
